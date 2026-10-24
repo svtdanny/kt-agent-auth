@@ -1,0 +1,238 @@
+{
+  "cluster": "auth-demo",
+  "startedAtUTC": "2026-10-24T17:37:03.490717+00:00",
+  "finishedAtUTC": "2026-10-24T17:38:00.796331+00:00",
+  "completed": true,
+  "pod": "command-runner-5d6dc84876-lrpmp",
+  "podUid": "09c7be9e-2165-4f36-8de4-16fb31c68f0d",
+  "sessionId": "01a16efc-d158-7dad-b97d-b398c213b13e",
+  "tests": [
+    {
+      "test": "trusted launcher registers immutable Pod UID and ServiceAccount UID binding",
+      "passed": true,
+      "pod": "command-runner-5d6dc84876-lrpmp",
+      "podUid": "09c7be9e-2165-4f36-8de4-16fb31c68f0d"
+    },
+    {
+      "test": "one native Session and one specific Pod use the same multi-permission ServiceAccount",
+      "passed": true,
+      "sessionId": "01a16efc-d158-7dad-b97d-b398c213b13e"
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "permissions": [],
+      "destination": "catalog",
+      "httpStatus": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "permissions": [],
+      "destination": "mcp",
+      "httpStatus": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "permissions": [],
+      "destination": "catalog",
+      "httpStatus": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "permissions": [],
+      "destination": "mcp",
+      "httpStatus": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "permissions": [
+        "catalog"
+      ],
+      "destination": "catalog",
+      "httpStatus": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "permissions": [
+        "catalog"
+      ],
+      "destination": "mcp",
+      "httpStatus": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "permissions": [
+        "catalog"
+      ],
+      "destination": "catalog",
+      "httpStatus": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "permissions": [
+        "catalog"
+      ],
+      "destination": "mcp",
+      "httpStatus": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "permissions": [
+        "catalog",
+        "mcp"
+      ],
+      "destination": "catalog",
+      "httpStatus": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "permissions": [
+        "catalog",
+        "mcp"
+      ],
+      "destination": "mcp",
+      "httpStatus": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "permissions": [
+        "catalog",
+        "mcp"
+      ],
+      "destination": "catalog",
+      "httpStatus": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "permissions": [
+        "catalog",
+        "mcp"
+      ],
+      "destination": "mcp",
+      "httpStatus": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "permissions": [
+        "mcp"
+      ],
+      "destination": "catalog",
+      "httpStatus": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "permissions": [
+        "mcp"
+      ],
+      "destination": "mcp",
+      "httpStatus": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "permissions": [
+        "mcp"
+      ],
+      "destination": "catalog",
+      "httpStatus": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "permissions": [
+        "mcp"
+      ],
+      "destination": "mcp",
+      "httpStatus": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permissions cannot be mixed and forged headers cannot select credentials",
+      "passed": true,
+      "source": "session"
+    },
+    {
+      "test": "permissions cannot be mixed and forged headers cannot select credentials",
+      "passed": true,
+      "source": "pod"
+    },
+    {
+      "test": "captured Pod cannot bypass rules through Service or backing Pod IP",
+      "passed": true
+    },
+    {
+      "test": "unrelated control Pod retains direct cross-namespace service access",
+      "passed": true
+    },
+    {
+      "test": "Pod netns firewall rejects non-DNS UDP without relying on CNI policy support",
+      "passed": true
+    },
+    {
+      "test": "Pod enrollment label removal revokes only that Pod through its watch",
+      "passed": true
+    },
+    {
+      "test": "selected Pod has no direct fallback when its dedicated gateway stops",
+      "passed": true
+    },
+    {
+      "test": "captured command traffic recovers after gateway restart",
+      "passed": true
+    },
+    {
+      "test": "warm Pod requests perform zero Kubernetes object GETs or Vault reads",
+      "passed": true,
+      "requests": 8,
+      "counterDeltas": {
+        "podGETs": 0,
+        "accountGETs": 0,
+        "vaultReads": 0
+      }
+    }
+  ]
+}

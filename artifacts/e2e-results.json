@@ -1,0 +1,97 @@
+{
+  "cluster": "auth-demo",
+  "driver": "minikube/docker",
+  "kagent": "1.0.0-alpha17",
+  "substrate": "0.6.0-alpha3",
+  "tests": [
+    {
+      "test": "unauthorized service-account selection rejected",
+      "passed": true
+    },
+    {
+      "test": "invalid caller credential rejected",
+      "passed": true
+    },
+    {
+      "test": "two native kagent sessions bound to different service accounts",
+      "passed": true,
+      "reader": "01a16efd-c131-73f5-9f46-13eeb1032019",
+      "writer": "01a16efd-c153-774b-a81b-1d6acfd36e46"
+    },
+    {
+      "test": "creation retries preserve an immutable service-account binding",
+      "passed": true
+    },
+    {
+      "test": "session invocation requires its authenticated owner",
+      "passed": true
+    },
+    {
+      "test": "Mastra GET reaches HTTPS API with gateway-injected reader credential",
+      "passed": true
+    },
+    {
+      "test": "reader POST denied before upstream receives it",
+      "passed": true
+    },
+    {
+      "test": "same Agent can write under writer service account",
+      "passed": true
+    },
+    {
+      "test": "gateway audit distinguishes both verified session identities",
+      "passed": true
+    },
+    {
+      "test": "forged HTTP identity headers cannot change permissions",
+      "passed": true
+    },
+    {
+      "test": "ungranted and encoded paths denied",
+      "passed": true
+    },
+    {
+      "test": "ServiceAccount watch propagates policy revocation",
+      "passed": true
+    },
+    {
+      "test": "removing managed label revokes egress and prevents new bindings",
+      "passed": true
+    },
+    {
+      "test": "Vault invalidation refreshes rotated credentials without polling",
+      "passed": true
+    },
+    {
+      "test": "warm authorization performs zero Kubernetes object GETs or Vault reads",
+      "passed": true,
+      "grantRequests": 20
+    },
+    {
+      "test": "unavailable ext_proc fails closed",
+      "passed": true,
+      "httpStatus": 500
+    },
+    {
+      "test": "bridge restart preserves PostgreSQL bindings and request idempotency",
+      "passed": true
+    },
+    {
+      "test": "recreated ServiceAccount UID cannot inherit an existing binding",
+      "passed": true
+    },
+    {
+      "test": "asynchronous reconciliation revokes externally deleted native Sessions",
+      "passed": true,
+      "cleanup": {
+        "Listed": 6,
+        "ConfirmedDeleted": 1,
+        "Purged": 0
+      }
+    },
+    {
+      "test": "deleted session bindings cannot invoke the Agent",
+      "passed": true
+    }
+  ]
+}

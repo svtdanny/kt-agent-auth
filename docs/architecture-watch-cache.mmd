@@ -1,0 +1,27 @@
+flowchart LR
+    SA["Kubernetes ServiceAccounts in demo<br/>auth.demo.dev/managed=true<br/>policy type + configuration + Vault reference"]
+    VAULT["Vault KV v2<br/>kv/data/auth-demo/demo/credential-reference"]
+    ADMIN["Credential rotation client"]
+    PODS["Only enrolled Pods in demo<br/>auth.demo.dev/egress=enforced<br/>actual Pod UID + serviceAccountName"]
+
+    subgraph CONTROL["Deployed control plane / bridge"]
+        WATCHER["Account + enrolled Pod informers / resync 0<br/>initial sync + reconnect / recovery relist"]
+        POLICY["Policy snapshots<br/>no TTL / usable during reconnect"]
+        AUTH["Context + exact request authorization<br/>Session or Pod binding / SA UID / policy version<br/>additive complete grants; conflicts deny"]
+        KEYS["Credential provider<br/>Kubernetes auth / verified HTTPS<br/>in-memory cache / no polling"]
+        MISS["Coalesced Vault read on miss<br/>scope and field validation<br/>failure denies / no stale fallback after invalidation"]
+        WATCHER -->|"add / update / delete / label removal"| POLICY
+        AUTH -->|"read"| POLICY
+        AUTH -->|"approved credential reference only"| KEYS
+        KEYS -->|"cache miss"| MISS
+    end
+
+    SA -->|"label-selected initial sync + WATCH"| WATCHER
+    PODS -->|"label-selected initial sync + WATCH<br/>deletion / replacement / label removal revokes Pod identity"| WATCHER
+    AUTH -->|"uncached requested account only / coalesced GET"| SA
+    MISS <-->|"scoped KV-v2 read / short-lived Vault token"| VAULT
+    ADMIN -->|"write / rotate / revoke"| VAULT
+    ADMIN -->|"internal mTLS invalidation<br/>next approved request refetches"| KEYS
+    EP["ext_proc / no Vault or Kubernetes access"] <-->|"HTTPS mTLS context / request grant / header mutations"| AUTH
+    AUTH <-->|"binding primary-key read"| DB[("Existing PostgreSQL<br/>private auth_bridge schema")]
+    GC["Async cleanup / 5 min<br/>all native Session pages + confirm NotFound<br/>retain suspended Sessions / abort on scan errors"] -->|"revoke / retain mappings 24 h<br/>launch tombstones 7 d"| DB

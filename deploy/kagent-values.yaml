@@ -1,0 +1,21 @@
+config:
+  database:
+    pool:
+      maxConns: 8
+  server:
+    auth:
+      mode: trusted-proxy
+  runtimeDefaults:
+    cpu: "1"
+    memory: 512Mi
+controller:
+  resources:
+    limits:
+      cpu: "2"
+      memory: 1Gi
+ui:
+  replicas: 0
+kagent-tools:
+  enabled: false
+grafana-mcp:
+  enabled: false

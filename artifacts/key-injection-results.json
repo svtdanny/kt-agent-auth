@@ -1,0 +1,63 @@
+{
+  "cluster": "auth-demo",
+  "startedAtUTC": "2026-10-24T17:39:24.367563+00:00",
+  "finishedAtUTC": "2026-10-24T17:39:50.557370+00:00",
+  "path": "real Mastra \u2192 atunnel \u2192 agentgateway \u2192 ext_proc \u2192 bridge \u2192 mock HTTPS API",
+  "authentication": "Vault KV v2 + Kubernetes auth; Authorization: Bearer <synthetic opaque key>",
+  "tests": [
+    {
+      "test": "mock API rejects a missing key",
+      "passed": true,
+      "httpStatus": 401
+    },
+    {
+      "test": "mock API rejects an incorrect key",
+      "passed": true,
+      "httpStatus": 401
+    },
+    {
+      "test": "mock accepts the exact reader and writer keys stored in Vault",
+      "passed": true
+    },
+    {
+      "test": "Vault Kubernetes role cannot read mock-private keys or write application keys",
+      "passed": true
+    },
+    {
+      "test": "gateway replaces the Mastra placeholder with the reader key",
+      "passed": true,
+      "authorizationHeaderCount": 1
+    },
+    {
+      "test": "gateway overwrites an agent-supplied incorrect Authorization header",
+      "passed": true,
+      "authorizationHeaderCount": 1
+    },
+    {
+      "test": "same Mastra Agent receives the writer key under the writer ServiceAccount",
+      "passed": true
+    },
+    {
+      "test": "forged account and Authorization headers cannot obtain writer access",
+      "passed": true,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "Vault update and cache invalidation change the injected key end to end",
+      "passed": true,
+      "httpStatus": 401,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "restoring the valid Vault key restores HTTP success without restarting bridge or processor",
+      "passed": true,
+      "httpStatus": 200
+    },
+    {
+      "test": "service keys are absent from agent responses, mock audit, and Harness configuration",
+      "passed": true
+    }
+  ],
+  "completed": true,
+  "credentialsRestored": true
+}

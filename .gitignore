@@ -1,0 +1,7 @@
+.cache/
+node_modules/
+dist/
+*.db
+artifacts/private/
+__pycache__/
+*.py[cod]

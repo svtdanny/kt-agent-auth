@@ -1,0 +1,11 @@
+{
+  "verifiedAtUTC": "2026-10-24T17:40:39.715134+00:00",
+  "passed": true,
+  "test": "Pod mapping and captured traffic survive the control-plane restart performed by the regression suite",
+  "podUid": "09c7be9e-2165-4f36-8de4-16fb31c68f0d",
+  "podCreatedAt": "2026-10-24T17:37:00Z",
+  "controlPlanePodUid": "3b62fb14-240a-476b-9325-b99be5eb9ebb",
+  "controlPlaneCreatedAt": "2026-10-24T17:39:02Z",
+  "serviceAccountUid": "b76183e3-d990-4766-8932-6abf0c3ac0c9",
+  "httpStatus": 200
+}

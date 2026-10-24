@@ -1,0 +1,6 @@
+.git
+.cache/*
+!.cache/build
+agent/node_modules
+scripts/__pycache__
+artifacts

@@ -1,0 +1,5 @@
+FROM scratch
+ARG BINARY
+COPY .cache/build/${BINARY} /app
+USER 65532:65532
+ENTRYPOINT ["/app"]

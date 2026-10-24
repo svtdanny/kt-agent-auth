@@ -1,0 +1,5 @@
+FROM localhost:5001/auth-demo/mastra:demo
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl iptables && rm -rf /var/lib/apt/lists/*
+COPY deploy/pod-capture.sh /app/pod-capture.sh
+ENTRYPOINT ["node", "/app/agent/server.mjs"]
