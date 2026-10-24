@@ -1,22 +1,22 @@
 {
   "cluster": "auth-demo",
-  "startedAtUTC": "2026-10-24T17:37:03.490717+00:00",
-  "finishedAtUTC": "2026-10-24T17:38:00.796331+00:00",
+  "startedAtUTC": "2026-10-24T22:11:04.012914+00:00",
+  "finishedAtUTC": "2026-10-24T22:12:22.765933+00:00",
   "completed": true,
-  "pod": "command-runner-5d6dc84876-lrpmp",
-  "podUid": "09c7be9e-2165-4f36-8de4-16fb31c68f0d",
-  "sessionId": "01a16efc-d158-7dad-b97d-b398c213b13e",
+  "pod": "command-runner-6d8d64fb96-dkgf7",
+  "podUid": "53e14d2a-ff67-4259-8dfb-fc0efe23abde",
+  "sessionId": "01a16ff7-ad57-783b-9f32-a8ff3c7cc821",
   "tests": [
     {
       "test": "trusted launcher registers immutable Pod UID and ServiceAccount UID binding",
       "passed": true,
-      "pod": "command-runner-5d6dc84876-lrpmp",
-      "podUid": "09c7be9e-2165-4f36-8de4-16fb31c68f0d"
+      "pod": "command-runner-6d8d64fb96-dkgf7",
+      "podUid": "53e14d2a-ff67-4259-8dfb-fc0efe23abde"
     },
     {
       "test": "one native Session and one specific Pod use the same multi-permission ServiceAccount",
       "passed": true,
-      "sessionId": "01a16efc-d158-7dad-b97d-b398c213b13e"
+      "sessionId": "01a16ff7-ad57-783b-9f32-a8ff3c7cc821"
     },
     {
       "test": "permission matrix",
@@ -217,7 +217,7 @@
       "passed": true
     },
     {
-      "test": "selected Pod has no direct fallback when its dedicated gateway stops",
+      "test": "selected Pod has no direct fallback when the shared gateway stops",
       "passed": true
     },
     {

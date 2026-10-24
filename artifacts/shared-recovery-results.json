@@ -1,0 +1,40 @@
+{
+  "verifiedAtUTC": "2026-10-24T22:17:02.703679+00:00",
+  "completed": true,
+  "test": "All four paths recover after shared gateway and control-plane restarts; existing Pod SQL binding retained",
+  "podUid": "53e14d2a-ff67-4259-8dfb-fc0efe23abde",
+  "podCreatedAt": "2026-10-24T21:57:55Z",
+  "controlPlanePodUid": "0335246f-4570-4859-9e4d-246837d0e507",
+  "controlPlaneCreatedAt": "2026-10-24T22:13:20Z",
+  "gatewayPodUid": "a38c95e6-7028-4fc2-8b6c-39d6589b088f",
+  "tests": [
+    {
+      "source": "session",
+      "destination": "internal-mcp",
+      "status": 200,
+      "credentialAccepted": true,
+      "passed": true
+    },
+    {
+      "source": "session",
+      "destination": "external-api",
+      "status": 200,
+      "credentialAccepted": true,
+      "passed": true
+    },
+    {
+      "source": "pod",
+      "destination": "internal-mcp",
+      "status": 200,
+      "credentialAccepted": true,
+      "passed": true
+    },
+    {
+      "source": "pod",
+      "destination": "external-api",
+      "status": 200,
+      "credentialAccepted": true,
+      "passed": true
+    }
+  ]
+}

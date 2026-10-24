@@ -15,8 +15,8 @@
     {
       "test": "two native kagent sessions bound to different service accounts",
       "passed": true,
-      "reader": "01a16efd-c131-73f5-9f46-13eeb1032019",
-      "writer": "01a16efd-c153-774b-a81b-1d6acfd36e46"
+      "reader": "01a16ff8-f244-77aa-bb14-f025c58bfb6e",
+      "writer": "01a16ff8-f270-7766-a720-caa577dac12d"
     },
     {
       "test": "creation retries preserve an immutable service-account binding",

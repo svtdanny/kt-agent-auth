@@ -130,7 +130,7 @@ def bootstrap(directory):
         auth=admin.checked('GET','sys/auth')['data']
         if 'kubernetes/' not in auth:admin.checked('POST','sys/auth/kubernetes',{'type':'kubernetes'})
         admin.checked('POST','auth/kubernetes/config',{'kubernetes_host':'https://kubernetes.default.svc:443'})
-        for role,account,names in [('auth-bridge','auth-control-plane',['read-token','write-token','mcp-token']),
+        for role,account,names in [('auth-bridge','auth-control-plane',['read-token','write-token','mcp-token','external-token']),
                                    ('auth-catalog','auth-catalog-api',['mock/reader','mock/writer']),
                                    ('auth-mcp','mock-mcp',['mock/mcp-reader','mock/mcp-writer'])]:
             policy='\n'.join('path "kv/data/'+PREFIX+name+'" { capabilities = ["read"] }' for name in names)
@@ -140,9 +140,10 @@ def bootstrap(directory):
                 'token_ttl':900,'token_max_ttl':3600})
         legacy=ROOT/'.cache/demo-credentials.json'
         old=json.loads(legacy.read_text()) if legacy.exists() else {'reader':secrets.token_urlsafe(24),'writer':secrets.token_urlsafe(24)}
-        old.update({'mcp-reader':secrets.token_urlsafe(24),'mcp-writer':secrets.token_urlsafe(24)})
+        old.update({key:secrets.token_urlsafe(24) for key in ['mcp-reader','mcp-writer','external-reader','external-writer']})
         for name,key in [('read-token','reader'),('write-token','writer'),('mock/reader','reader'),('mock/writer','writer'),
-                         ('mcp-token','mcp-reader'),('mock/mcp-reader','mcp-reader'),('mock/mcp-writer','mcp-writer')]:
+                         ('mcp-token','mcp-reader'),('mock/mcp-reader','mcp-reader'),('mock/mcp-writer','mcp-writer'),
+                         ('external-token','external-reader'),('mock/external-reader','external-reader'),('mock/external-writer','external-writer')]:
             status,_=admin.request('GET','kv/data/'+PREFIX+name)
             if status==404:admin.write(name,old[key])
             elif status!=200:raise RuntimeError('cannot seed local Vault credential')

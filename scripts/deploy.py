@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Deploy the demo into auth-demo; only public APIs and runtime configuration are changed."""
 import base64
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,7 +9,8 @@ import time
 import yaml
 from database import provision, migrate_legacy, ca_volume
 from vault_demo import bootstrap,configure_client,client_env
-from gateway_overlay import config_overlay,MCP_HOST
+from gateway_overlay import MCP_HOST
+from shared_gateway import EXTERNAL_ORIGIN
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = ROOT / '.cache'
@@ -45,6 +45,7 @@ def certificates():
                       'ext-proc':['auth-ext-proc.demo.svc.cluster.local','auth-ext-proc.demo.svc'],
                       'catalog-api':['catalog-api.demo.svc.cluster.local','catalog-alias.demo.svc.cluster.local','localhost'],
                       'agentgateway':[], 'pod-egress':['pod-egress.demo.svc.cluster.local','pod-egress.demo.svc','localhost'],
+                      'shared-egress':['atenet-egress.ate-system.svc','atenet-egress.ate-system.svc.cluster.local','localhost'],
                       'auth-vault':['auth-vault.demo.svc.cluster.local','auth-vault.demo.svc','localhost']}.items():
         if (directory/f'{name}.crt').exists(): continue
         ext = 'extendedKeyUsage=serverAuth,clientAuth\n'
@@ -84,16 +85,8 @@ def deployment(name, binary, cert, *, port, env=None, account=None, database=Fal
                     'template':{'metadata':{'labels':{'app':name},'annotations':{'auth.demo.dev/image-id':image_id}},'spec':pod}}}
 
 def configure_gateway(directory):
-    maps=json.loads(kubectl('-n','ate-system','get','configmap','-o','json',capture=True))['items']
-    cm=next(x for x in maps if x['metadata']['name'].endswith('atenet-egress-agentgateway-config'))
-    raw=config_overlay(yaml.safe_load(cm['data']['config.yaml']))
-    patch={'data':{'config.yaml':raw}}
-    kubectl('-n','ate-system','patch','configmap',cm['metadata']['name'],'--type=merge','-p',json.dumps(patch))
-    patch={'spec':{'template':{'metadata':{'annotations':{'auth.demo.dev/config-hash':hashlib.sha256(raw.encode()).hexdigest()}},'spec':{
-        'volumes':[{'name':'auth-extproc','secret':{'secretName':'auth-gateway-client'}}],
-        'containers':[{'name':'agentgateway','volumeMounts':[{'name':'auth-extproc','mountPath':'/run/auth-extproc','readOnly':True}]}]}}}}
-    kubectl('-n','ate-system','patch','deployment','atenet-egress','--type=strategic','-p',json.dumps(patch))
-    kubectl('-n','ate-system','rollout','status','deployment/atenet-egress','--timeout=180s')
+    from shared_gateway import install
+    return install(directory)
 
 def main():
     if kubectl('config','current-context',capture=True).strip()!='auth-demo': raise SystemExit('auth-demo kubeconfig required')
@@ -152,7 +145,7 @@ def main():
             'byo':{},'workload':{'image':image,'command':['/app/adapter']},
             'env':[{'name':'DEMO_API_ORIGIN','value':ORIGIN}],
             'substrate':{'workerPoolRef':{'name':'auth-demo'},'snapshotPolicy':{'location':'s3://ate-snapshots/auth-demo/'}}}},
-        {'apiVersion':'api.kagent.dev/v1alpha3','kind':'EgressPolicy','metadata':{'namespace':NS,'name':'catalog-transport'},'spec':{'destinations':[{'origin':ORIGIN},{'origin':'http://'+MCP_HOST+':8080'}]}},
+        {'apiVersion':'api.kagent.dev/v1alpha3','kind':'EgressPolicy','metadata':{'namespace':NS,'name':'catalog-transport'},'spec':{'destinations':[{'origin':ORIGIN},{'origin':'http://'+MCP_HOST+':8080'},{'origin':EXTERNAL_ORIGIN},{'origin':'https://example.com'}]}},
         {'apiVersion':'api.kagent.dev/v1alpha3','kind':'Agent','metadata':{'namespace':NS,'name':'mastra-http'},'spec':{
             'template':{'inline':{'description':'Mastra HTTP authorization demo'}},'harnessRef':{'name':'mastra'},'egressPolicyRefs':[{'name':'catalog-transport'}]}}]
     apply(objects)

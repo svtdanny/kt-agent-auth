@@ -39,7 +39,7 @@ func (s *Server) Process(stream extv3.ExternalProcessor_ProcessServer) error {
 		return status.Error(codes.Unauthenticated, "gateway identity required")
 	}
 	tls, ok := p.AuthInfo.(credentials.TLSInfo)
-	if !ok || len(tls.State.VerifiedChains) == 0 || len(tls.State.PeerCertificates) == 0 || tls.State.PeerCertificates[0].Subject.CommonName != "agentgateway" {
+	if !ok || len(tls.State.VerifiedChains) == 0 || len(tls.State.PeerCertificates) == 0 || (tls.State.PeerCertificates[0].Subject.CommonName != "agentgateway" && tls.State.PeerCertificates[0].Subject.CommonName != "auth-egress") {
 		return status.Error(codes.Unauthenticated, "authenticated gateway required")
 	}
 	for {
@@ -66,6 +66,9 @@ func reject(reason string, code typev3.StatusCode) *extv3.ProcessingResponse {
 	return &extv3.ProcessingResponse{Response: &extv3.ProcessingResponse_ImmediateResponse{ImmediateResponse: &extv3.ImmediateResponse{Status: &typev3.HttpStatus{Code: code}, Body: []byte("request denied: " + reason), Details: "auth_demo_denied"}}}
 }
 func (s *Server) Evaluate(ctx context.Context, message *extv3.ProcessingRequest) *extv3.ProcessingResponse {
+	if attribute(message, "xds.filter_chain_name") == "managed_pod_connect" {
+		return s.podTunnel(ctx, message)
+	}
 	id, r, err := parse(message)
 	if err != nil {
 		return deny("missing or invalid gateway context")
@@ -129,7 +132,10 @@ func (s *Server) evaluateRequest(ctx context.Context, id string, r api.Request, 
 	return &extv3.ProcessingResponse{Response: &extv3.ProcessingResponse_RequestHeaders{RequestHeaders: &extv3.HeadersResponse{Response: &extv3.CommonResponse{HeaderMutation: &extv3.HeaderMutation{SetHeaders: sets}}}}}
 }
 func parse(m *extv3.ProcessingRequest) (string, api.Request, error) {
-	attrs := m.GetAttributes()["envoy.filters.http.ext_proc"]
+	attrs, err := gatewayAttributes(m)
+	if err != nil {
+		return "", api.Request{}, err
+	}
 	id := attrs.GetFields()["actorSpiffeId"].GetStringValue()
 	if _, _, err := api.ParseActor(id); err != nil {
 		if _, _, podErr := api.ParsePod(id); podErr != nil {

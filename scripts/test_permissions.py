@@ -67,14 +67,18 @@ def main():
             demo.wait_until(ready)
         def audit(origin):
             return (demo.audit() if origin==CATALOG else plain(18445,'/audit')[1]) or []
-        def call(source,origin,method,path,headers=None):
+        def call(source,origin,method,path,headers=None,allow_tunnel_denial=False):
             body={'origin':origin,'method':method,'path':path,'headers':headers or {}}
             if source=='pod':
                 body['execution']='command'
                 status,value=plain(18446,'/invoke',body)
             else:status,value=demo.request(18443,f'/v1/sessions/{sid}/invoke',body,token=token)
             assert status==200,('agent execution failed',source,status,value)
-            calls=demo.calls(value);assert calls and len(calls)==1,('tool did not execute exactly once',source,value)
+            calls=demo.calls(value)
+            if allow_tunnel_denial and not calls:
+                assert 'error-text' in value.get('text',''),value
+                return {'status':0,'tunnelDenied':True}
+            assert calls and len(calls)==1,('tool did not execute exactly once',source,value)
             return calls[0]
 
         for names in [[],['catalog'],['catalog','mcp'],['mcp']]:
@@ -135,8 +139,8 @@ def main():
         demo.kubectl('-n','demo','label','pod',pod['name'],'auth.demo.dev/egress-')
         try:
             demo.wait_until(lambda:context(identities[1])[0]==403)
-            before=len(audit(MCP));response=call('pod',MCP,'POST','/mcp')
-            assert response['status']==403 and len(audit(MCP))==before
+            before=len(audit(MCP));response=call('pod',MCP,'POST','/mcp',allow_tunnel_denial=True)
+            assert (response['status']==403 or response.get('tunnelDenied')) and len(audit(MCP))==before
             assert call('session',MCP,'POST','/mcp')['status']==200
             record('Pod enrollment label removal revokes only that Pod through its watch')
         finally:
@@ -144,16 +148,16 @@ def main():
         demo.wait_until(lambda:context(identities[1])[0]==200)
 
         before=len(audit(MCP))
-        demo.kubectl('-n','demo','scale','deployment/pod-egress','--replicas=0')
-        demo.kubectl('-n','demo','wait','--for=delete','pod','-l','app=pod-egress','--timeout=60s')
+        demo.kubectl('-n','ate-system','scale','deployment/atenet-egress','--replicas=0')
+        demo.kubectl('-n','ate-system','wait','--for=delete','pod','-l','app=atenet-egress','--timeout=60s')
         try:
             probe=subprocess.run(['kubectl','--context','auth-demo','-n','demo','exec',pod['name'],'-c','mastra','--',
                 'curl','--noproxy','*','--max-time','10','--silent',MCP+'/public'],env=demo.ENV,capture_output=True)
             assert probe.returncode!=0 and len(audit(MCP))==before,'Pod fell back to a direct connection'
-            record('selected Pod has no direct fallback when its dedicated gateway stops')
+            record('selected Pod has no direct fallback when the shared gateway stops')
         finally:
-            demo.kubectl('-n','demo','scale','deployment/pod-egress','--replicas=1')
-            demo.kubectl('-n','demo','rollout','status','deployment/pod-egress','--timeout=120s')
+            demo.kubectl('-n','ate-system','scale','deployment/atenet-egress','--replicas=1')
+            demo.kubectl('-n','ate-system','rollout','status','deployment/atenet-egress','--timeout=120s')
         # The relay can hold a connection to the removed gateway Pod. Probe
         # recovery with a safe GET; never replay a side-effecting POST here.
         recovered=False
@@ -181,7 +185,7 @@ def main():
         (demo.ROOT/'artifacts/permissions-results.json').write_text(json.dumps(report,indent=2)+'\n')
         print(f'{len(results)} permission and routing checks passed on local Minikube.',flush=True)
     finally:
-        set_permissions(['catalog','mcp'])
+        set_permissions(['catalog','mcp','external'])
         if sid is not None:
             try:demo.delete_session(token,sid)
             except Exception:print('native test Session cleanup failed',flush=True)

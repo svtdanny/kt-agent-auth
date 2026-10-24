@@ -1,30 +1,39 @@
 # Mastra session authorization demo
 
-A session bridge binds an authenticated user and a selected Kubernetes ServiceAccount to a native kagent Session. An enrolled ordinary Pod is bound separately by its Kubernetes UID and actual ServiceAccount UID. A separate Go external processor evaluates policy code for HTTP(S) requests intercepted by dedicated agentgateway instances. Credentials are injected by the gateway and never enter the agent environment.
+A session bridge binds an authenticated user and a selected Kubernetes ServiceAccount to a native kagent Session. An enrolled ordinary Pod is bound separately by its Kubernetes UID and actual ServiceAccount UID. A separate Go external processor evaluates policy code for HTTP(S) requests intercepted by one shared Envoy egress deployment. Credentials are injected by the gateway and never enter the agent environment.
 
-The demo runs released kagent `1.0.0-alpha17` and Substrate `0.6.0-alpha3` with unchanged upstream source and binaries. Our components are the bridge, external processor, test API, and Mastra BYO image. Deployment overlays configure external processing, demo TLS trust, and database connection budgets.
+The demo runs released kagent `1.0.0-alpha17` and Substrate `0.6.0-alpha3` with unchanged upstream source and binaries. Our components are the bridge, external processor, test APIs, and Mastra BYO image. Deployment configuration selects one shared Envoy gateway for native Actor and managed Pod traffic. The native authorization processor and SDS certificate minter are built from pinned, unchanged Substrate source.
 
 Complete communication diagrams: [architecture and watch flow](docs/architecture.md). Editable Mermaid sources: [architecture](docs/architecture-current.mmd), [watches](docs/architecture-watch-cache.mmd).
 
 ```mermaid
-flowchart LR
-    U[User] -->|Agent + ServiceAccount| B[Bridge / control plane]
-    B -->|Create / invoke / delete / async cleanup| K[kagent]
-    B -->|TokenReview + SAR; policy initial sync + watches; GET on miss| KS[Kubernetes API]
-    B -->|Kubernetes auth; KV read on credential cache miss| V[Vault KV v2]
-    B <-->|Private auth_bridge schema| DB[(Existing PostgreSQL)]
-    K <-->|Native platform state| DB
-    M[Mastra sandbox] -->|Ordinary HTTP/S via atunnel| G[Dedicated atenet-egress]
-    P[Specific command Pod] -->|TCP capture / Envoy / Pod UID mTLS| PG[Dedicated pod-egress]
-    PG -->|mTLS ext_proc: verified Pod identity| E
-    PG -->|Allowed request + injected credential| API
-    PG -->|Allowed POST /mcp + separate key| MCP[Mock in test-services]
-    G -->|Allowed POST /mcp + separate key| MCP
-    G -->|mTLS ext_proc: headers + verified Actor SPIFFE| E[Go processor]
-    E <-->|mTLS: context + exact request grant| B
-    E -->|Allow / deny + header mutations| G
-    G -->|Allowed request + injected credential| API[Catalog API]
+flowchart TB
+    subgraph CLUSTER["One Kubernetes cluster"]
+        subgraph WORKER["kagent worker Pod"]
+            A["Agent sandbox / gVisor or Kata"] -->|"Captured TCP"| T["atunnel"]
+        end
+        subgraph POD["Enrolled custom Pod"]
+            B["Application / commands"] -->|"Captured TCP"| R["Envoy TCP relay"]
+        end
+        T -->|"mTLS CONNECT / Actor identity"| G
+        R -->|"mTLS CONNECT / Pod identity"| G
+        subgraph GATEWAY["SHARED atenet-egress Deployment / Service"]
+            G["Inspecting Envoy / native and Pod listeners"]
+            SDS["sdsmint / automatic destination certificates"]
+            NATIVE["Substrate native Actor authorization"]
+            G <-.->|"SDS / Unix socket"| SDS
+            G <-.->|"Native listener only"| NATIVE
+        end
+        G -->|"Allowed request + injected key"| MCP["Internal MCP Service / other namespace"]
+        G <-.->|"gRPC mTLS / headers, decision, mutations"| EP["OUR Go ext_proc"]
+        EP <-.->|"HTTPS mTLS / context + exact request grant"| CP["OUR control plane"]
+        CP <-->|"Immutable Session or Pod binding"| DB[("Existing PostgreSQL")]
+        CP <-->|"Credential cache miss"| VAULT["Vault"]
+        KUBE["Kubernetes API"] -->|"ServiceAccount / enrolled Pod watches"| CP
+    end
+    G -->|"Allowed HTTPS + injected key"| EXTERNAL["External API / outside Kubernetes"]
 ```
+
 
 ## Run locally
 
@@ -36,10 +45,11 @@ python3 scripts/test_postgres.py
 python3 scripts/test_e2e.py
 python3 scripts/test_key_injection.py
 python3 scripts/test_permissions.py
+python3 scripts/test_shared_gateway.py
 python3 scripts/benchmark.py
 ```
 
-Every Kubernetes operation targets local Minikube profile `auth-demo` through `.cache/kubeconfig`; the user's default kubeconfig context is not used. Setup uses a loopback registry on port 5001 and a separate `demo` namespace. Setup also installs the opted-in command Pod and its dedicated gateway. A deterministic model drives the real Mastra agent loop and HTTP/command tool without a paid provider or provider credentials.
+Every Kubernetes operation targets local Minikube profile `auth-demo` through `.cache/kubeconfig`; the user's default kubeconfig context is not used. Setup uses a loopback registry on port 5001 and a separate `demo` namespace. Setup also installs the opted-in command Pod and an external Docker HTTPS fixture. Both native Sessions and the Pod use the same `atenet-egress.ate-system.svc` Service: port 443 for Actor certificates and port 8443 for Pod certificates. A deterministic model drives the real Mastra agent loop and HTTP/command tool without a paid provider or provider credentials.
 
 Development checks:
 
@@ -52,6 +62,8 @@ node --test agent/server.test.mjs
 ```
 
 The SQL tests in ordinary `go test` skip without `AUTH_DEMO_TEST_DATABASE_URL`. `scripts/test_postgres.py` runs them with the race detector in a temporary Pod against an isolated database on the existing local PostgreSQL server, then removes that database. Run integration tests and benchmarks sequentially to avoid competing load.
+
+The upstream Helm chart still renders agentgateway. `scripts/deploy.py` replaces its egress deployment with the shared Envoy configuration; after a direct upstream Helm reinstall/upgrade, rerun it and then `scripts/permissions_demo.py` to restore the shared deployment and enroll the command Pod.
 
 Generated certificates, passwords, kubeconfig, binaries, and logs stay in ignored `.cache/`. Demo certificates expire after seven days; regenerate `.cache/tls/` and redeploy when needed. Evidence is saved in `artifacts/` after successful test runs.
 
@@ -123,7 +135,7 @@ Policies are ordinary Go code implementing `policy.Evaluator` and registered in 
 
 `permission-set/v1` attaches multiple complete grants to one ServiceAccount. A Session keeps one immutable ServiceAccount binding and can use every matching grant in its current policy. Grants are additive: at least one must match the entire destination, scheme, port, method and path. Fields from different grants cannot be combined. An empty set denies all requests; invalid entries and conflicting credentials in overlapping grants deny the request. A set supports up to 64 uniquely named grants. `http-request/v1` supports exact HTTP(S) origins on arbitrary ports and an optional Vault credential reference; legacy catalog grants can also be included.
 
-For example, `multi-reader` authorizes both destinations independently:
+For example, `multi-reader` authorizes three destinations independently:
 
 ```yaml
 metadata:
@@ -138,11 +150,14 @@ metadata:
           "methods":["GET"],"paths":["/catalog"],"credential":"read-token"}},
         {"id":"internal-mcp","type":"http-request/v1","config":{
           "origin":"http://mock-mcp.test-services.svc.cluster.local:8080",
-          "methods":["POST"],"paths":["/mcp"],"credential":"mcp-token"}}
+          "methods":["POST"],"paths":["/mcp"],"credential":"mcp-token"}},
+        {"id":"external-read","type":"http-request/v1","config":{
+          "origin":"https://external-api.auth-demo.test:8443",
+          "methods":["GET"],"paths":["/external"],"credential":"external-token"}}
       ]}
 ```
 
-Removing either grant takes effect through the existing ServiceAccount watch, without replacing the Session, Pod, or gateway. Gateway routes provide transport to configured destinations; policy grants determine each caller's access. The native HTTP route uses Substrate's required dynamic backend and retains its native egress policy. Native platform and TaskStore routes retain their existing behavior.
+Removing any grant takes effect through the existing ServiceAccount watch, without replacing the Session, Pod, or gateway. Gateway routes provide transport to configured destinations; policy grants determine each caller's access. Native HTTP routes retain Substrate Actor authentication and egress policy checks before our processor. Native platform/TaskStore hosts bypass our application processor while retaining native authorization. Native platform and TaskStore routes retain their existing behavior.
 
 The control plane maintains informers for ServiceAccounts selected by `auth.demo.dev/managed=true` and Pods selected by `auth.demo.dev/egress=enforced` in `demo`. Policies contain credential references, never credential values. The bridge has no permission to read Kubernetes Secrets; application keys are stored in Vault KV v2.
 
@@ -156,7 +171,7 @@ Warm authorization uses in-memory policy and Vault credential caches plus Postgr
 
 ## Vault credentials
 
-The bridge reads credentials directly from Vault using the official Go SDK. With the demo settings, policy reference `read-token` resolves to `kv/data/auth-demo/demo/read-token`, field `token`. Path traversal, encoded separators, other Kubernetes namespaces, missing/empty fields, and newline-containing credentials are rejected. Only a policy-approved reference reaches the provider. The bridge Vault role can read exactly the reader, writer and MCP credential paths; it cannot write keys or read the mock services' private paths.
+The bridge reads credentials directly from Vault using the official Go SDK. With the demo settings, policy reference `read-token` resolves to `kv/data/auth-demo/demo/read-token`, field `token`. Path traversal, encoded separators, other Kubernetes namespaces, missing/empty fields, and newline-containing credentials are rejected. Only a policy-approved reference reaches the provider. The bridge Vault role can read exactly the reader, writer, MCP and external credential paths; it cannot write keys or read the mock services' private paths.
 
 Vault authentication uses the bridge's projected ServiceAccount JWT with audience `vault`. Its short-lived Vault token stays in memory and is obtained again on demand before expiry or after an authentication failure. This creates no secret polling job. A deployment using Vault Agent can instead provide a token sink through `VAULT_TOKEN_FILE`; the agent then owns token renewal.
 
@@ -187,43 +202,50 @@ The mock catalog has a separate Vault role and private `mock/reader` and `mock/w
 
 `auth-ext-proc` has no mounted Kubernetes token, resource permissions, or database access. It receives the standard Envoy external processing gRPC protocol on port 50051, requiring the gateway's client certificate. It calls the bridge over HTTPS mTLS on port 8443. Unknown sessions, revoked bindings, and unavailable authorization dependencies cannot produce an allow.
 
-The header phase contains HTTP headers plus `:method`, `:authority`, `:path`, and `:scheme`. Ordinary header values arrive in `raw_value`; pseudoheaders use `value`. The gateway overlay supplies:
+The header phase contains HTTP headers plus `:method`, `:authority`, `:path`, and `:scheme`. The outer mTLS CONNECT listener writes the verified certificate URI SAN and actual CONNECT destination into `dev.ate.actor.identity` and `dev.ate.connect.authority` filter-state objects. These objects are carried into the private HTTP/TLS inspection listener. Application headers cannot set them.
 
-```json
-{
-  "actorSpiffeId": "spiffe://substrate-actor.local/worker-for-actor/demo/session-<native-session-uuid>",
-  "destinationPort": 443,
-  "scheme": "https"
-}
-```
+Our processor receives those CEL filter-state attributes together with `xds.filter_chain_name`. It derives HTTP versus HTTPS from the trusted chain name and the destination port from the original CONNECT authority. A request's explicit authority port must agree. Native chains accept only native Session identities; managed Pod chains accept only Pod UID identities. The managed CONNECT leg validates the live registered Pod before allowing entry into inspection and releases no application credential.
 
-These attributes are under `ProcessingRequest.attributes["envoy.filters.http.ext_proc"]`. `actorSpiffeId` evaluates `source.spiffeId`, derived from the verified certificate presented by `atunnel` or the enrolled Pod's Envoy relay. The bridge supplies the bound Agent and ServiceAccount; HTTP identity headers cannot replace this identity. The HTTP and HTTPS routes supply their respective scheme constants. Destination port comes from the actual connection, and an explicit authority port must agree with it. This demo does not send request or response bodies to the processor; query parameters and MCP tool names are not evaluated.
+The gateway uses hashable filter state to isolate internal upstream connections by caller and original destination. Envoy `1.38.6` supplies the required generic hashable-string factory. Replacing this with an ordinary string can mix connection metadata and is not supported. Two identities using one shared gateway never select each other's ServiceAccount from HTTP headers.
 
-The sandbox sends a placeholder Authorization header. A successful processor response tells agentgateway to overwrite it with the approved credential. The catalog API reports credential acceptance and an identity label without echoing tokens.
+The sandbox sends placeholder Authorization. Our processor returns an overwrite mutation only after the bridge approves the exact request and rule-selected Vault reference. The mock reports credential acceptance without echoing tokens. The demo does not send bodies to our processor; query parameters and MCP tool names are not evaluated.
 
-Native EgressPolicy first permits transport to the catalog and internal mock origins. The processor adds caller-specific HTTP method/path authorization. Arbitrary Internet origins are not enabled. Native platform HTTP/TaskStore traffic keeps the upstream route and bypasses this processor.
+The shared gateway has two authenticated listeners, one Envoy proxy process, one Substrate native authorization helper and one `atenet sdsmint` helper. The minter uses the existing Substrate interception CA and delivers destination certificates through local SDS; both native sandboxes and enrolled Pods trust that public CA. Certificate RPCs and processor RPCs add no application forwarding proxy. Native Sessions and captured Pods both have two forwarding stages: their tunnel client, then this shared Envoy.
 
-## Specific command Pod and dedicated gateway
+The pinned native Envoy bootstrap is adapted for inspected HTTP(S) using stock Envoy TLS/HTTP inspectors. Native Actor and per-request HTTP egress checks remain in the unchanged Substrate helper. Opaque TCP and TLS passthrough are not enabled in this demo. Platform and TaskStore traffic retains native authorization and bypasses our application permission checks.
 
-[command-runner.yaml](deploy/command-runner.yaml) is the actual deployed Pod template. The [rendered bundle](deploy/pod-egress-demo.yaml) includes the relay configuration, gateway routes, ServiceAccount policy and mock service. Private identity/TLS Secrets are provisioned separately by `scripts/permissions_demo.py`; the bundle contains no private keys or Vault credential values.
+## Specific command Pod and shared gateway
+
+[command-runner.yaml](deploy/command-runner.yaml) is the actual deployed Pod template. The [rendered bundle](deploy/pod-egress-demo.yaml) includes the relay configuration, ServiceAccount policy and mock service. [shared-envoy.yaml](deploy/shared-envoy.yaml) contains the shared gateway resources. Private identity/TLS Secrets are provisioned separately by `scripts/permissions_demo.py`; the bundle contains no private keys or Vault credential values.
 
 The command Pod runs real Mastra, whose tool executes `curl --noproxy '*'` through `execFile`. Transparent capture requires no proxy-aware application code or Istio:
 
 1. A privileged init step with only `NET_ADMIN` and `NET_RAW` sets rules inside this Pod's network namespace.
 2. Application TCP is redirected to the loopback Envoy relay on port 15001. The application is non-root, has no capabilities, and cannot become the relay UID.
-3. Envoy reads the original destination and sends mTLS CONNECT to the dedicated `pod-egress` Service. Only the relay UID can reach that Service IP/port. DNS is allowed only to the cluster resolver; other UDP and non-loopback IPv6 are blocked in this IPv4 fixture.
-4. Stock agentgateway terminates CONNECT, intercepts HTTPS using a demo CA trusted by the application, and sends HTTP headers plus the verified Pod SPIFFE identity to the same ext_proc service.
+3. Envoy reads the original destination and sends mTLS CONNECT to the managed-Pod listener on `atenet-egress.ate-system.svc:8443`. Only the relay UID can reach that Service IP/port. DNS is allowed only to the cluster resolver; other UDP and non-loopback IPv6 are blocked in this IPv4 fixture.
+4. The shared Envoy terminates CONNECT, uses SDS to intercept HTTPS under the trusted Substrate CA, and sends HTTP headers plus the verified Pod SPIFFE identity to our ext_proc service.
 5. The bridge resolves the durable Pod UID binding, checks watched Pod and ServiceAccount UIDs, and evaluates the current permission set. The gateway forwards permitted requests with the rule-selected key from Vault.
 
-These rules affect only the explicitly installed Pod template. The local Minikube CNI does not enforce NetworkPolicy; this implementation enforces capture and its egress exceptions in the Pod itself and installs no NetworkPolicy. No mock-service ingress restrictions, cluster-wide defaults, or changes to unrelated workloads are introduced. The test confirms that an unrelated Pod can still reach the mock directly. Both gateways are dedicated to these agent paths.
+These rules affect only the explicitly installed Pod template. The local Minikube CNI does not enforce NetworkPolicy; this implementation enforces capture and its egress exceptions in the Pod itself. A gateway-only ingress allowance admits enrolled Pods to the managed listener on policy-enforcing CNIs; it does not change MCP ingress. No mock-service ingress restrictions, cluster-wide defaults, or changes to unrelated workloads are introduced. The test confirms that an unrelated Pod can still reach the mock directly. Both caller types converge on one shared gateway; unrelated workloads keep their existing paths.
 
 The trusted demo launcher observes the created Pod UID, issues the relay's client certificate with URI SAN `spiffe://auth-demo.local/ns/demo/pod/<uid>`, and calls `POST /internal/pods` using internal mTLS. That endpoint reads the actual Pod's ServiceAccount rather than trusting a requested account name. Relay keys are not mounted in the application container. Deletion, loss of enrollment label, Pod UID replacement, or ServiceAccount UID replacement denies the old identity once its watch event arrives. Bindings survive bridge restarts in PostgreSQL. Pod mapping rows currently remain for troubleshooting; native Session retention jobs do not purge them.
 
 Container restart within the same Pod preserves its UID and certificate. A replacement Pod needs enrollment and a new certificate; rerun `python3 scripts/permissions_demo.py` for this demo. Automatic certificate issuance/rotation for arbitrary Deployment replacements is outside this launcher. Recreating a gateway or DNS Service with a different ClusterIP also requires rerunning the launcher to update the Pod's fixed firewall destinations.
 
-The other namespace hosts an HTTP authentication mock at `/mcp`, rather than an MCP protocol implementation. These tests establish destination/method/path filtering and key insertion, including Mastra command execution. Adding MCP JSON-RPC tool-name or body filtering requires an evaluator and body processing configuration.
+The other namespace hosts an HTTP authentication mock at `/mcp`, rather than an MCP protocol implementation. The external HTTPS authentication mock runs in a Docker container outside Kubernetes, with no Service or Endpoint representing it. Setup adds one exact test DNS record in CoreDNS and preserves other DNS configuration. Its distinct expected synthetic keys are read from Vault into a mode-0600, ignored fixture file mounted read-only outside Kubernetes. Application credential selection in the bridge always uses Vault. These tests establish destination/method/path filtering and key insertion, including Mastra command execution. Adding MCP JSON-RPC tool-name or body filtering requires an evaluator and body processing configuration.
 
 ## Validation and benchmark
+
+Run `python3 scripts/test_shared_gateway.py` to exercise both caller types through the same live Envoy Pod. The [shared-gateway report](artifacts/shared-gateway-results.json) records the gateway UID, caller UIDs, images, actual upstream audit deltas, and the external fixture's Docker network address.
+
+| Caller | Target | With matching grant | Without grant |
+| --- | --- | --- | --- |
+| Native kagent Session | Internal MCP in `test-services` | 200, MCP key accepted | 403, zero upstream calls |
+| Captured Pod / real Mastra curl command | Internal MCP in `test-services` | 200, MCP key accepted | 403, zero upstream calls |
+| Native kagent Session | HTTPS service outside Kubernetes | 200, external key accepted | 403, zero upstream calls |
+| Captured Pod / real Mastra curl command | HTTPS service outside Kubernetes | 200, external key accepted | 403, zero upstream calls |
+
+The 59-check suite tests all eight subsets of catalog/MCP/external grants from both callers, giving 48 matrix cases. It also checks forged identity and Authorization headers, cross-listener certificate rejection, automatic SDS issuance, zero warm Kubernetes object GETs/Vault reads, and concurrent native Sessions with different ServiceAccounts alongside the Pod. A credential-free `https://example.com/` request from each caller tests public Internet HTTPS in addition to the controlled external authentication mock.
 
 Run `python3 scripts/test_permissions.py` for the new [27-check Minikube suite](artifacts/permissions-results.json). It keeps one native Session ID and one Pod UID while changing only their shared ServiceAccount's permission set:
 
@@ -236,7 +258,7 @@ Run `python3 scripts/test_permissions.py` for the new [27-check Minikube suite](
 
 Every row is tested through both native Mastra HTTP and the captured Pod's real curl command, with upstream audit counts and exact credential acceptance. Further checks cover mixed-rule attacks, forged identity/Authorization headers, Service/Pod IP bypass attempts, unchanged direct access from an unrelated Pod, non-DNS UDP rejection, watched Pod enrollment removal, gateway outage and recovery, and zero object/Vault reads across eight warm Pod requests. Gateway recovery is probed using safe GETs before attempting a new POST; the test never retries a side-effecting request automatically.
 
-The [post-restart check](artifacts/permissions-persistence.json) also confirms that the same Pod UID still resolves and executes a permitted command after the bridge is replaced by the Session regression suite.
+The [post-restart checks](artifacts/shared-recovery-results.json) confirm that the same Pod UID binding survives bridge replacement and all four internal/external paths work after gateway and control-plane restarts.
 
 For a focused credential-insertion test, run `python3 scripts/test_key_injection.py` against the deployed demo. It uses the HTTPS catalog mock with two synthetic opaque bearer keys stored in Vault; no external provider account or production key is needed. The mock compares exact key values and rejects missing, incorrect, empty, or duplicate Authorization credentials. Responses and its audit show only the matched identity and header count.
 
@@ -251,7 +273,7 @@ The [Minikube integration results](artifacts/e2e-results.json) cover 20 checks u
 The shared PostgreSQL server keeps `max_connections=100`. Connection budgets are bridge 4, kagent 8, and Substrate API 8 per replica. Native components retain additional dedicated pools. These supported configuration settings avoid CPU-derived defaults exhausting the shared server. No upstream source patch or PostgreSQL server limit increase was needed.
 
 <!-- benchmark-results:start -->
-The [Vault-backed run](artifacts/benchmark-results.json), started at `2026-10-24T14:31:06Z`, completed in 121.0 seconds:
+The historical agentgateway [Vault-backed run](artifacts/benchmark-results.json), started at `2026-10-24T14:31:06Z`, completed in 121.0 seconds:
 
 | Concurrent reader GETs | Successful / attempted | Successful requests/sec, before Vault → Vault | p95 latency, before Vault → Vault |
 | --- | --- | --- | --- |
@@ -269,4 +291,4 @@ Five-second samples observed peaks of approximately 0.86 CPU cores / 17.6 MiB wo
 
 Historical evidence is retained: [before Vault](artifacts/benchmark-results-before-vault.json), [uncached](artifacts/benchmark-results-uncached.json), [cache only](artifacts/benchmark-results-cache-only.json), [bbolt + TTL + batching](artifacts/benchmark-results-before-reimplementation.json), and [first watch/PostgreSQL run before connection budgeting](artifacts/benchmark-results-watch-pg-before-pool-budget.json). The latter had 59 failed allowed requests caused by PostgreSQL connection exhaustion. Earlier comparisons include storage, watch strategy, removal of hot-path native Session reads, and pool-budget configuration changes.
 
-This is a single-node local benchmark with one bridge and one processor replica, bounded stage durations, and closed-loop concurrency. It establishes the MVP's behavior and measured limits; it is not an overnight soak or a production capacity guarantee.
+The benchmark above predates the shared Envoy deployment. It is a single-node local benchmark with one bridge and one processor replica, bounded stage durations, and closed-loop concurrency. It establishes the MVP's behavior and measured limits; it is not an overnight soak or a production capacity guarantee.

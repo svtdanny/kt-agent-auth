@@ -11,136 +11,10 @@ metadata:
       "http-request/v1", "config": {"origin": "https://catalog-api.demo.svc.cluster.local",
       "methods": ["GET"], "paths": ["/catalog"], "credential": "read-token"}}, {"id":
       "internal-mcp", "type": "http-request/v1", "config": {"origin": "http://mock-mcp.test-services.svc.cluster.local:8080",
-      "methods": ["POST"], "paths": ["/mcp"], "credential": "mcp-token"}}]}'
+      "methods": ["POST"], "paths": ["/mcp"], "credential": "mcp-token"}}, {"id":
+      "external-read", "type": "http-request/v1", "config": {"origin": "https://external-api.auth-demo.test:8443",
+      "methods": ["GET"], "paths": ["/external"], "credential": "external-token"}}]}'
 automountServiceAccountToken: false
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: pod-egress-config
-  namespace: demo
-data:
-  config.yaml: "frontendPolicies:\n  connect:\n    mode: tunnel\ngateways:\n  pod-egress:\n\
-    \    port: 8443\n    bindAddress: $POD_IP\n    protocol: HTTPS\n    tls:\n   \
-    \   cert: /tls/tls.crt\n      key: /tls/tls.key\n      root: /tls/ca.crt\nbinds:\n\
-    - mode: internal\n  protocol: AUTO\n  listeners:\n  - protocol: HTTPS\n    tls:\n\
-    \      mode: dynamicCa\n      cert: /intercept/tls.crt\n      key: /intercept/tls.key\n\
-    \    routes:\n    - hostnames:\n      - catalog-api.demo.svc.cluster.local\n \
-    \     backends:\n      - host: catalog-api.demo.svc.cluster.local:443\n      \
-    \  policies:\n          backendTLS:\n            root: /tls/ca.crt\n      policies:\n\
-    \        extProc:\n          host: auth-ext-proc.demo.svc.cluster.local:50051\n\
-    \          failureMode: failClosed\n          policies:\n            backendTLS:\n\
-    \              root: /run/auth-extproc/ca.crt\n              cert: /run/auth-extproc/tls.crt\n\
-    \              key: /run/auth-extproc/tls.key\n          processingOptions:\n\
-    \            requestHeaderMode: send\n            requestBodyMode: none\n    \
-    \        responseHeaderMode: skip\n            responseBodyMode: none\n      \
-    \      requestTrailerMode: skip\n            responseTrailerMode: skip\n     \
-    \     requestAttributes:\n            actorSpiffeId: source.spiffeId\n       \
-    \     destinationPort: destination.port\n            scheme: '\"https\"'\n  -\
-    \ protocol: HTTP\n    routes:\n    - hostnames:\n      - mock-mcp.test-services.svc.cluster.local\n\
-    \      backends:\n      - host: mock-mcp.test-services.svc.cluster.local:8080\n\
-    \      policies:\n        extProc:\n          host: auth-ext-proc.demo.svc.cluster.local:50051\n\
-    \          failureMode: failClosed\n          policies:\n            backendTLS:\n\
-    \              root: /run/auth-extproc/ca.crt\n              cert: /run/auth-extproc/tls.crt\n\
-    \              key: /run/auth-extproc/tls.key\n          processingOptions:\n\
-    \            requestHeaderMode: send\n            requestBodyMode: none\n    \
-    \        responseHeaderMode: skip\n            responseBodyMode: none\n      \
-    \      requestTrailerMode: skip\n            responseTrailerMode: skip\n     \
-    \     requestAttributes:\n            actorSpiffeId: source.spiffeId\n       \
-    \     destinationPort: destination.port\n            scheme: '\"http\"'\n"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  namespace: demo
-  name: pod-egress
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: pod-egress
-  template:
-    metadata:
-      labels:
-        app: pod-egress
-      annotations:
-        auth.demo.dev/image-id: sha256:c53455588f1919ddd4cffa11ddc46e675f342e7769b9852b594f270297f95706
-        auth.demo.dev/config-hash: 411908616849881007d48b3ecf9f13c3dfe153a5caed27962fa08737cc098913
-    spec:
-      serviceAccountName: default
-      automountServiceAccountToken: false
-      securityContext:
-        runAsUser: 65532
-        runAsGroup: 65532
-        fsGroup: 65532
-      volumes:
-      - name: tls
-        secret:
-          secretName: pod-egress-tls
-      - name: config
-        configMap:
-          name: pod-egress-config
-      - name: processor
-        secret:
-          secretName: auth-pod-gateway-client
-      - name: intercept
-        secret:
-          secretName: auth-pod-intercept-ca
-      containers:
-      - name: pod-egress
-        image: ghcr.io/kagent-dev/substrate/agentgateway:3554db38a0b2@sha256:309f6811560635471958db67b0f68dd083d84048dffc681967599d159ebfc83d
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8443
-        volumeMounts:
-        - name: tls
-          mountPath: /tls
-          readOnly: true
-        - name: config
-          mountPath: /config
-          readOnly: true
-        - name: processor
-          mountPath: /run/auth-extproc
-          readOnly: true
-        - name: intercept
-          mountPath: /intercept
-          readOnly: true
-        env:
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: '1'
-            memory: 512Mi
-        readinessProbe:
-          httpGet:
-            path: /healthz/ready
-            port: 15021
-          periodSeconds: 2
-        command:
-        - /app/agentgateway
-        args:
-        - -f
-        - /config/config.yaml
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: pod-egress
-  namespace: demo
-spec:
-  selector:
-    app: pod-egress
-  ports:
-  - port: 8443
-    targetPort: 8443
 ---
 apiVersion: v1
 kind: Namespace
@@ -170,7 +44,7 @@ spec:
       labels:
         app: mock-mcp
       annotations:
-        auth.demo.dev/image-id: sha256:3a58ff156af2a448b69bdb85ba2520b98a2a8eff072747e0721d10da52b5e2a3
+        auth.demo.dev/image-id: sha256:18d387ef6493ef5f4e75233fbb9c75afa52cf1dfc1ed7145f4de7475e10cf506
     spec:
       serviceAccountName: mock-mcp
       automountServiceAccountToken: true
@@ -267,24 +141,26 @@ data:
     \          access_log:\n          - name: envoy.access_loggers.stdout\n      \
     \      typed_config:\n              '@type': type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog\n\
     \              log_format:\n                text_format_source:\n            \
-    \      inline_string: 'captured %DOWNSTREAM_LOCAL_ADDRESS% %RESPONSE_FLAGS%\n\n\
-    \                    '\n  clusters:\n  - name: dedicated_egress\n    type: STRICT_DNS\n\
-    \    connect_timeout: 5s\n    dns_lookup_family: V4_ONLY\n    load_assignment:\n\
-    \      cluster_name: dedicated_egress\n      endpoints:\n      - lb_endpoints:\n\
-    \        - endpoint:\n            address:\n              socket_address:\n  \
-    \              address: pod-egress.demo.svc.cluster.local\n                port_value:\
-    \ 8443\n    typed_extension_protocol_options:\n      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:\n\
+    \      inline_string: 'captured %DOWNSTREAM_LOCAL_ADDRESS% %RESPONSE_FLAGS%\n\
+    \                    %UPSTREAM_TRANSPORT_FAILURE_REASON%\n\n                 \
+    \   '\n  clusters:\n  - name: dedicated_egress\n    type: STRICT_DNS\n    connect_timeout:\
+    \ 5s\n    dns_lookup_family: V4_ONLY\n    load_assignment:\n      cluster_name:\
+    \ dedicated_egress\n      endpoints:\n      - lb_endpoints:\n        - endpoint:\n\
+    \            address:\n              socket_address:\n                address:\
+    \ atenet-egress.ate-system.svc.cluster.local\n                port_value: 8443\n\
+    \    typed_extension_protocol_options:\n      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:\n\
     \        '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions\n\
     \        explicit_http_config:\n          http_protocol_options: {}\n    transport_socket:\n\
     \      name: envoy.transport_sockets.tls\n      typed_config:\n        '@type':\
     \ type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext\n\
-    \        sni: pod-egress.demo.svc.cluster.local\n        common_tls_context:\n\
-    \          alpn_protocols:\n          - http/1.1\n          tls_certificates:\n\
-    \          - certificate_chain:\n              filename: /identity/tls.crt\n \
-    \           private_key:\n              filename: /identity/tls.key\n        \
-    \  validation_context:\n            trusted_ca:\n              filename: /identity/ca.crt\n\
-    \            match_typed_subject_alt_names:\n            - san_type: DNS\n   \
-    \           matcher:\n                exact: pod-egress.demo.svc.cluster.local\n"
+    \        sni: atenet-egress.ate-system.svc\n        common_tls_context:\n    \
+    \      alpn_protocols:\n          - http/1.1\n          tls_params:\n        \
+    \    tls_minimum_protocol_version: TLSv1_3\n            tls_maximum_protocol_version:\
+    \ TLSv1_3\n          tls_certificates:\n          - certificate_chain:\n     \
+    \         filename: /identity/tls.crt\n            private_key:\n            \
+    \  filename: /identity/tls.key\n          validation_context:\n            trusted_ca:\n\
+    \              filename: /identity/ca.crt\n            match_typed_subject_alt_names:\n\
+    \            - san_type: DNS\n              matcher:\n                exact: atenet-egress.ate-system.svc\n"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -332,41 +208,23 @@ data:
 
     -----BEGIN CERTIFICATE-----
 
-    MIIDMTCCAhmgAwIBAgIUcrCJ0UE/unVOAv5IHzIg/PJTC/MwDQYJKoZIhvcNAQEL
+    MIIBjzCCATSgAwIBAgIUeF4ueEnD6PgvfyDpWCVCHeTtgWQwCgYIKoZIzj0EAwIw
 
-    BQAwIDEeMBwGA1UEAwwVYXV0aC1wb2QtaW50ZXJjZXB0aW9uMB4XDTI2MTAyNDE3
+    JTEjMCEGA1UEAxMaVFg3NlE2MlI0UkxINEozTUJKV1pMVlNGVU0wHhcNMjYxMDIz
 
-    MjEwN1oXDTI2MTAzMTE3MjEwN1owIDEeMBwGA1UEAwwVYXV0aC1wb2QtaW50ZXJj
+    MjE0OTMwWhcNMjcxMDIzMjE0OTMwWjAlMSMwIQYDVQQDExpUWDc2UTYyUjRSTEg0
 
-    ZXB0aW9uMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk8yf4VF2czMT
+    SjNNQkpXWkxWU0ZVTTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABLOblFnLTgij
 
-    W41U4PIqCMWomAT4R6ZNoVgbp0Iy2vydtyASoI2OCHIeTb7MDDrOlrv+gHNJ5vAG
+    iHQvBRuDIPHg1oEGYGICeIrzCes30wxvtX5cM/kKr4TfMwEy8fXFK78lsX9ItZzt
 
-    pvss+Aeg9CqQkTiA4qiBfiNBimu4GGLNXdRjHn+F5QYDLfpHjcGv6Yq8ia9vfODN
+    TMjzfvROsZKjQjBAMA4GA1UdDwEB/wQEAwIChDAPBgNVHRMBAf8EBTADAQH/MB0G
 
-    eoAVaLjuaqcjvkd6PCjxkUWs3IhVAWA5QfT5dp69eZgBFyTFPORzf4ISNfLdtFuU
+    A1UdDgQWBBSNWSejyv8MdL0+lVdZV4P+IoS2eDAKBggqhkjOPQQDAgNJADBGAiEA
 
-    B4inIQfUY632Lj6StzYoiFAeOyrN4Sh1gu3OjTuYpm/P32AarYut/S7eEMTnxOw5
+    wz44jJoWasQLyV9alX+G10EJU9Bhe5jyAAfL/dPA6qwCIQCKpJZccxLPpeba9C4k
 
-    XrhMBNsEMoNoaN0+PLI6iH+k0+s3GF2oc9boy2aHKXtLIABZogRSKZjlACHvRrRV
-
-    LKSq6LGO1wIDAQABo2MwYTAdBgNVHQ4EFgQUDOntI8KPe203ROIhnEJDIpKf9Fcw
-
-    HwYDVR0jBBgwFoAUDOntI8KPe203ROIhnEJDIpKf9FcwDwYDVR0TAQH/BAUwAwEB
-
-    /zAOBgNVHQ8BAf8EBAMCAQYwDQYJKoZIhvcNAQELBQADggEBAIDD4TVMabOwqYxP
-
-    BLIKlanTsYD3HqJ1rp6ytDoFoWV3We0Q5te4tw5Ea3oK3l9y6H4m1okI0SlXb9BT
-
-    d1dlGaguvasFBCp8YdFnidjBZ1rV2j49pg9ANxITIlH6rnUYNUKneKYpa8+fDP43
-
-    8cO3ZXAnrXGp6CYNAfMSC5tu4A7ovJLGVR/QT3l1n07X66wKxd5btH3mt+pSE6Rj
-
-    hCgmOjNCsEZc2FqZouSA5d6Yfnhp/CKCRXrRKowAfz/lj9CB/dBb4fYyuXOSeC85
-
-    bMM8lNror4WnJEIh9WhuJg/fOSVR5Mhq393lX24T7nJHbUxeGPtnFw/fJ1zBGpZt
-
-    rYNub7A=
+    uHwFxQN526zqqigeckU3oBSA0g==
 
     -----END CERTIFICATE-----
 
@@ -404,7 +262,7 @@ spec:
         imagePullPolicy: Never
         env:
         - name: AUTH_EGRESS_IP
-          value: 10.97.230.185
+          value: 10.108.113.241
         - name: AUTH_DNS_IP
           value: 10.96.0.10
         command:
@@ -420,7 +278,7 @@ spec:
             - NET_ADMIN
             - NET_RAW
       - name: relay
-        image: envoyproxy/envoy:v1.37.7
+        image: envoyproxy/envoy:v1.38.6
         restartPolicy: Always
         args:
         - -c

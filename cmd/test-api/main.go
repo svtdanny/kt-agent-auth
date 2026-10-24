@@ -41,7 +41,7 @@ func newHandler(readerToken, writerToken string) http.Handler {
 			}
 		}
 		// Audit key identity and header count, never the credential itself.
-		event := map[string]any{"method": r.Method, "path": r.URL.Path, "credential": identity, "credentialAccepted": identity != "", "authorizationHeaderCount": len(values)}
+		event := map[string]any{"method": r.Method, "path": r.URL.Path, "credential": identity, "credentialAccepted": identity != "", "authorizationHeaderCount": len(values), "remoteAddress": r.RemoteAddr}
 		mu.Lock()
 		events = append(events, event)
 		mu.Unlock()
@@ -55,25 +55,43 @@ func newHandler(readerToken, writerToken string) http.Handler {
 }
 
 func main() {
-	provider, err := credential.FromEnv()
-	if err != nil {
-		log.Fatal(err)
-	}
-	readerRef := os.Getenv("MOCK_READER_REF")
-	if readerRef == "" {
-		readerRef = "mock/reader"
-	}
-	writerRef := os.Getenv("MOCK_WRITER_REF")
-	if writerRef == "" {
-		writerRef = "mock/writer"
-	}
-	reader, err := provider.Read(context.Background(), "demo", readerRef)
-	if err != nil {
-		log.Fatal(err)
-	}
-	writer, err := provider.Read(context.Background(), "demo", writerRef)
-	if err != nil {
-		log.Fatal(err)
+	var reader, writer string
+	if path := os.Getenv("MOCK_KEYS_FILE"); path != "" {
+		// The external Docker fixture loads its expected synthetic keys from
+		// Vault at setup. This file is outside Kubernetes and excluded from Git.
+		var keys struct {
+			Reader string `json:"reader"`
+			Writer string `json:"writer"`
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			log.Fatal("cannot read fixture keys")
+		}
+		if err := json.Unmarshal(raw, &keys); err != nil || keys.Reader == "" || keys.Writer == "" {
+			log.Fatal("invalid fixture keys")
+		}
+		reader, writer = keys.Reader, keys.Writer
+	} else {
+		provider, err := credential.FromEnv()
+		if err != nil {
+			log.Fatal(err)
+		}
+		readerRef := os.Getenv("MOCK_READER_REF")
+		if readerRef == "" {
+			readerRef = "mock/reader"
+		}
+		writerRef := os.Getenv("MOCK_WRITER_REF")
+		if writerRef == "" {
+			writerRef = "mock/writer"
+		}
+		reader, err = provider.Read(context.Background(), "demo", readerRef)
+		if err != nil {
+			log.Fatal(err)
+		}
+		writer, err = provider.Read(context.Background(), "demo", writerRef)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	mux := newHandler(reader, writer)
 	if os.Getenv("MOCK_PLAINTEXT") == "true" {

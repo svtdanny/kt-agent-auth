@@ -30,7 +30,7 @@ spec:
         imagePullPolicy: Never
         env:
         - name: AUTH_EGRESS_IP
-          value: 10.97.230.185
+          value: 10.108.113.241
         - name: AUTH_DNS_IP
           value: 10.96.0.10
         command:
@@ -46,7 +46,7 @@ spec:
             - NET_ADMIN
             - NET_RAW
       - name: relay
-        image: envoyproxy/envoy:v1.37.7
+        image: envoyproxy/envoy:v1.38.6
         restartPolicy: Always
         args:
         - -c

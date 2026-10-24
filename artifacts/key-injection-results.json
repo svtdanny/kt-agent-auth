@@ -1,7 +1,7 @@
 {
   "cluster": "auth-demo",
-  "startedAtUTC": "2026-10-24T17:39:24.367563+00:00",
-  "finishedAtUTC": "2026-10-24T17:39:50.557370+00:00",
+  "startedAtUTC": "2026-10-24T22:13:42.435650+00:00",
+  "finishedAtUTC": "2026-10-24T22:14:08.329328+00:00",
   "path": "real Mastra \u2192 atunnel \u2192 agentgateway \u2192 ext_proc \u2192 bridge \u2192 mock HTTPS API",
   "authentication": "Vault KV v2 + Kubernetes auth; Authorization: Bearer <synthetic opaque key>",
   "tests": [

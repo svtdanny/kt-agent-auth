@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Install only the enrolled Pod, its private gateway, and cross-namespace fixture."""
+"""Install an enrolled Pod and fixtures using the shared Envoy gateway."""
 import base64
-import hashlib
 import http.client
 import json
 import shutil
@@ -11,19 +10,22 @@ import time
 
 import yaml
 from database import ROOT,ENV,kubectl,apply
-from gateway_overlay import MCP_HOST,processor
+from gateway_overlay import MCP_HOST
+from shared_gateway import GATEWAY_HOST,EXTERNAL_ORIGIN,ENVOY_IMAGE
 
 CATALOG='https://catalog-api.demo.svc.cluster.local'
 MCP='http://'+MCP_HOST+':8080'
-GATEWAY_IMAGE='ghcr.io/kagent-dev/substrate/agentgateway:3554db38a0b2@sha256:309f6811560635471958db67b0f68dd083d84048dffc681967599d159ebfc83d'
-ENVOY_IMAGE='envoyproxy/envoy:v1.37.7'
 
 
 def permission_set(names):
     rules={'catalog':{'id':'catalog-read','type':'http-request/v1','config':{
                 'origin':CATALOG,'methods':['GET'],'paths':['/catalog'],'credential':'read-token'}},
            'mcp':{'id':'internal-mcp','type':'http-request/v1','config':{
-                'origin':MCP,'methods':['POST'],'paths':['/mcp'],'credential':'mcp-token'}}}
+                'origin':MCP,'methods':['POST'],'paths':['/mcp'],'credential':'mcp-token'}},
+           'external':{'id':'external-read','type':'http-request/v1','config':{
+                'origin':EXTERNAL_ORIGIN,'methods':['GET'],'paths':['/external'],'credential':'external-token'}},
+           'public':{'id':'public-web','type':'http-request/v1','config':{
+                'origin':'https://example.com','methods':['GET'],'paths':['/']}}}
     return {'permissions':[rules[name] for name in names]}
 
 
@@ -44,69 +46,34 @@ def relay_config():
               'tunneling_config':{'hostname':'%DOWNSTREAM_LOCAL_ADDRESS%'},
               'access_log':[{'name':'envoy.access_loggers.stdout','typed_config':{
                   '@type':'type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog',
-                  'log_format':{'text_format_source':{'inline_string':'captured %DOWNSTREAM_LOCAL_ADDRESS% %RESPONSE_FLAGS%\n'}}}}]}}]}]}],
+                  'log_format':{'text_format_source':{'inline_string':'captured %DOWNSTREAM_LOCAL_ADDRESS% %RESPONSE_FLAGS% %UPSTREAM_TRANSPORT_FAILURE_REASON%\n'}}}}]}}]}]}],
         'clusters':[{'name':'dedicated_egress','type':'STRICT_DNS','connect_timeout':'5s','dns_lookup_family':'V4_ONLY',
           'load_assignment':{'cluster_name':'dedicated_egress','endpoints':[{'lb_endpoints':[{'endpoint':{
-              'address':{'socket_address':{'address':'pod-egress.demo.svc.cluster.local','port_value':8443}}}}]}]},
+              'address':{'socket_address':{'address':GATEWAY_HOST+'.cluster.local','port_value':8443}}}}]}]},
           'typed_extension_protocol_options':{'envoy.extensions.upstreams.http.v3.HttpProtocolOptions':{
               '@type':'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
               'explicit_http_config':{'http_protocol_options':{}}}},
           'transport_socket':{'name':'envoy.transport_sockets.tls','typed_config':{
               '@type':'type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext',
-              'sni':'pod-egress.demo.svc.cluster.local','common_tls_context':{
+              'sni':GATEWAY_HOST,'common_tls_context':{
                   'alpn_protocols':['http/1.1'],
+                  'tls_params':{'tls_minimum_protocol_version':'TLSv1_3','tls_maximum_protocol_version':'TLSv1_3'},
                   'tls_certificates':[{'certificate_chain':{'filename':'/identity/tls.crt'},'private_key':{'filename':'/identity/tls.key'}}],
                   'validation_context':{'trusted_ca':{'filename':'/identity/ca.crt'},'match_typed_subject_alt_names':[{
-                      'san_type':'DNS','matcher':{'exact':'pod-egress.demo.svc.cluster.local'}}]}}}}} ]}}
-
-
-def gateway_config():
-    # Backends are selected from gateway-owned routes. A forged HTTP Host can
-    # never authorize credentials for an arbitrary CONNECT target IP.
-    https={'protocol':'HTTPS','tls':{'mode':'dynamicCa','cert':'/intercept/tls.crt','key':'/intercept/tls.key'},
-           'routes':[{'hostnames':['catalog-api.demo.svc.cluster.local'],
-               'backends':[{'host':'catalog-api.demo.svc.cluster.local:443','policies':{'backendTLS':{'root':'/tls/ca.crt'}}}],
-               'policies':{'extProc':processor('https')}}]}
-    http={'protocol':'HTTP','routes':[{'hostnames':[MCP_HOST],
-           'backends':[{'host':MCP_HOST+':8080'}],'policies':{'extProc':processor('http')}}]}
-    return {'frontendPolicies':{'connect':{'mode':'tunnel'}},
-        'gateways':{'pod-egress':{'port':8443,'bindAddress':'$POD_IP','protocol':'HTTPS',
-            'tls':{'cert':'/tls/tls.crt','key':'/tls/tls.key','root':'/tls/ca.crt'}}},
-        'binds':[{'mode':'internal','protocol':'AUTO','listeners':[https,http]}]}
+                      'san_type':'DNS','matcher':{'exact':GATEWAY_HOST}}]}}}}} ]}}
 
 
 def install():
     from deploy import obj,certificates,tls_secret,deployment,service
     from vault_demo import configure_client,client_env
     directory=certificates()
-    ca=directory/'pod-intercept-ca.crt'
-    if not ca.exists():
-        subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','7','-subj','/CN=auth-pod-interception',
-            '-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign',
-            '-keyout',str(directory/'pod-intercept-ca.key'),'-out',str(ca)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-        (directory/'pod-intercept-ca.key').chmod(0o600)
-    config=yaml.safe_dump(gateway_config(),sort_keys=False)
-    gateway=deployment('pod-egress','ext-proc','pod-egress-tls',port=8443)
-    pod=gateway['spec']['template']['spec'];container=pod['containers'][0]
-    container.update({'image':GATEWAY_IMAGE,'command':['/app/agentgateway'],'args':['-f','/config/config.yaml'],
-        'env':[{'name':'POD_IP','valueFrom':{'fieldRef':{'fieldPath':'status.podIP'}}}],
-        'readinessProbe':{'httpGet':{'path':'/healthz/ready','port':15021},'periodSeconds':2}})
-    gateway['spec']['template']['metadata']['annotations']['auth.demo.dev/config-hash']=hashlib.sha256(config.encode()).hexdigest()
-    pod['volumes'] += [{'name':'config','configMap':{'name':'pod-egress-config'}},
-                       {'name':'processor','secret':{'secretName':'auth-pod-gateway-client'}},
-                       {'name':'intercept','secret':{'secretName':'auth-pod-intercept-ca'}}]
-    container['volumeMounts'] += [{'name':'config','mountPath':'/config','readOnly':True},
-                                {'name':'processor','mountPath':'/run/auth-extproc','readOnly':True},
-                                {'name':'intercept','mountPath':'/intercept','readOnly':True}]
     sa=obj('ServiceAccount','multi-reader',automountServiceAccountToken=False)
     sa['metadata'].update({'labels':{'auth.demo.dev/managed':'true'},'annotations':{
-        'auth.demo.dev/policy-type':'permission-set/v1','auth.demo.dev/policy-config':json.dumps(permission_set(['catalog','mcp']))}})
-    objects=[sa,tls_secret('pod-egress-tls','pod-egress',directory),
-        tls_secret('auth-pod-gateway-client','agentgateway',directory),
-        tls_secret('auth-pod-intercept-ca','pod-intercept-ca',directory),
-        obj('ConfigMap','pod-egress-config',data={'config.yaml':config}),gateway,service('pod-egress',8443,8443),
-        {'apiVersion':'v1','kind':'Namespace','metadata':{'name':'test-services'}}]
+        'auth.demo.dev/policy-type':'permission-set/v1','auth.demo.dev/policy-config':json.dumps(permission_set(['catalog','mcp','external']))}})
+    objects=[sa,{'apiVersion':'v1','kind':'Namespace','metadata':{'name':'test-services'}}]
     apply(objects)
+    from external_fixture import install as external_install
+    external_install()
     mock=configure_client(deployment('mock-mcp','test-api',None,port=8080,account='mock-mcp',env=client_env('auth-mcp')+[
         {'name':'MOCK_PLAINTEXT','value':'true'},{'name':'MOCK_READER_REF','value':'mock/mcp-reader'},
         {'name':'MOCK_WRITER_REF','value':'mock/mcp-writer'}]))
@@ -116,7 +83,6 @@ def install():
     apply([mock_sa,
            {'apiVersion':'v1','kind':'Secret','metadata':{'name':'auth-control-plane-tls','namespace':'test-services'},
             'data':{'ca.crt':base64.b64encode((directory/'ca.crt').read_bytes()).decode()}},mock,mock_svc])
-    kubectl('-n','demo','rollout','status','deployment/pod-egress','--timeout=120s')
     kubectl('-n','test-services','rollout','status','deployment/mock-mcp','--timeout=120s')
 
     # Our explicit fixture launcher replaces only its own enrolled deployment.
@@ -125,12 +91,12 @@ def install():
         kubectl('-n','demo','scale','deployment/command-runner','--replicas=0')
         kubectl('-n','demo','wait','--for=delete','pod','-l','app=command-runner','--timeout=90s')
     kubectl('-n','demo','delete','secret','command-runner-identity','--ignore-not-found=true')
-    gateway_ip=json.loads(kubectl('-n','demo','get','service','pod-egress','-o','json'))['spec']['clusterIP']
+    gateway_ip=json.loads(kubectl('-n','ate-system','get','service','atenet-egress','-o','json'))['spec']['clusterIP']
     dns_ip=json.loads(kubectl('-n','kube-system','get','service','kube-dns','-o','json'))['spec']['clusterIP']
     runner=runner_deployment(gateway_ip,dns_ip)
     (ROOT/'deploy/command-runner.yaml').write_text(yaml.safe_dump(runner,sort_keys=False))
     runner_objects=[obj('ConfigMap','command-runner-relay',data={'envoy.yaml':yaml.safe_dump(relay_config(),sort_keys=False)}),
-        obj('ConfigMap','pod-egress-trust',data={'ca-bundle.pem':(directory/'ca.crt').read_text()+ca.read_text()}),
+        obj('ConfigMap','pod-egress-trust',data={'ca-bundle.pem':(directory/'ca.crt').read_text()+base64.b64decode(json.loads(kubectl('-n','ate-system','get','secret','egress-mitm-ca-pool','-o','json'))['data']['tls.crt']).decode()}),
         runner]
     apply(runner_objects)
     # Reviewable resources contain no private keys or credential values.
@@ -146,6 +112,10 @@ def install():
     apply([tls_secret('command-runner-identity','command-runner',directory)])
     kubectl('-n','demo','rollout','status','deployment/command-runner','--timeout=180s')
     register_pod(identity,directory)
+    kubectl('-n','demo','delete','deployment','pod-egress','--ignore-not-found=true')
+    kubectl('-n','demo','delete','service','pod-egress','--ignore-not-found=true')
+    kubectl('-n','demo','delete','secret','pod-egress-tls','auth-pod-gateway-client','auth-pod-intercept-ca','--ignore-not-found=true')
+    kubectl('-n','demo','delete','configmap','pod-egress-config','--ignore-not-found=true')
     return identity
 
 
