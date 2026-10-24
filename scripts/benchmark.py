@@ -36,7 +36,31 @@ def resources():
             'pods':[{'namespace':p['podRef']['namespace'],'name':p['podRef']['name'],
                      'cpu':p.get('cpu'),'memory':p.get('memory'),
                      'containers':[{'name':c['name'],'cpu':c.get('cpu'),'memory':c.get('memory')} for c in p.get('containers',[])]}
-                    for p in data.get('pods',[]) if p['podRef']['namespace'] in ('demo','kagent','ate-system')]}
+                    for p in data.get('pods',[]) if p['podRef']['namespace'] in ('demo','kagent','ate-system','test-services')]}
+
+def assess(report):
+    full=[s for s in report['stages'] if s.get('statuses')]
+    direct=[s for s in report['stages'] if s.get('counts')]
+    result={
+        'authorizationBypasses':sum(s['unexpectedAllows'] for s in full)+sum(s['counts']['unexpectedAllows'] for s in direct),
+        'wrongCredentialResponses':sum(s['wrongCredentialCount']+s.get('credentialFailures',0) for s in full),
+        'upstreamAuditMatchesSuccessfulRequests':all(s['upstreamCountMatchesSuccesses'] for s in full),
+        'allowedWorkloadFailures':sum(s['completed']-s['statuses'].get('200',0) for s in full if not s['forbiddenWorkload']),
+        'forbiddenWorkloadFailures':sum(s['completed']-s['statuses'].get('403',0) for s in full if s['forbiddenWorkload']),
+        'directUnexpectedDenials':sum(s['counts']['unexpectedDenials'] for s in direct),
+        'directTransportErrors':sum(s['counts']['transportErrors'] for s in direct),
+        'directMissingCredentialMutations':sum(s['counts']['missingCredentialMutations'] for s in direct),
+        'recoveredAfterOverload':next((s['recovered'] for s in report['stages'] if s['name']=='recovery/three-successes'),False),
+        'cleanupFailures':len(report.get('cleanupErrors',[])),
+        'allWorkloadsMeasured':len(full)==6 and len(direct)==4,
+    }
+    delta=report.get('authorityTraffic',{}).get('delta',{})
+    for output,counter in [('warmPolicyGETs','accountGETs'),('warmPodGETs','podGETs'),('warmVaultReads','vaultReads'),('warmVaultLogins','vaultLogins')]:
+        result[output]=delta.get(counter,0)
+    return result
+
+def passed(assessment):
+    return all(value if isinstance(value,bool) else value==0 for value in assessment.values())
 
 def build_runner():
     minikube=shutil.which('minikube') or str(ROOT/'.cache/bin/minikube')
@@ -104,25 +128,13 @@ def main():
                                       'Direct ext_proc stage uses the gateway client certificate and an asserted real session SPIFFE ID; it excludes the actual gateway and upstream.',
                                       'Full path runs real Mastra tools and transparent gateway interception in two native sessions.',
                                       'Client-go QPS/burst and service resource limits are unchanged; policies use Kubernetes watches and Vault credentials use cache-on-first-read with explicit invalidation.']})
-        full=[s for s in report['stages'] if s.get('statuses')]
-        direct=[s for s in report['stages'] if s.get('counts')]
-        report['assessment']={
-            'authorizationBypasses':sum(s['unexpectedAllows'] for s in full)+sum(s['counts']['unexpectedAllows'] for s in direct),
-            'wrongCredentialResponses':sum(s['wrongCredentialCount'] for s in full),
-            'upstreamAuditMatchesSuccessfulRequests':all(s['upstreamCountMatchesSuccesses'] for s in full),
-            'allowedWorkloadFailures':sum(s['completed']-s['statuses'].get('200',0) for s in full if not s['forbiddenWorkload']),
-            'directUnexpectedDenials':sum(s['counts']['unexpectedDenials'] for s in direct),
-            'directTransportErrors':sum(s['counts']['transportErrors'] for s in direct),
-            'recoveredAfterOverload':next((s['recovered'] for s in report['stages'] if s['name']=='recovery/three-successes'),False),
-        }
-        delta=report.get('authorityTraffic',{}).get('delta',{})
-        report['assessment']['warmPolicyGETs']=delta.get('accountGETs',0)
-        report['assessment']['warmVaultReads']=delta.get('vaultReads',0)
+        report['assessment']=assess(report)
+        report['passed']=bool(report['completed'] and state['status']['phase']=='Succeeded' and passed(report['assessment']))
         (ROOT/'artifacts').mkdir(exist_ok=True)
         destination=ROOT/'artifacts/benchmark-results.json'
         destination.write_text(json.dumps(report,indent=2)+'\n')
         print('Report:',destination,flush=True)
-        if state['status']['phase']!='Succeeded' or not report['completed']:raise AssertionError(report.get('error','benchmark pod failed'))
+        if not report['passed']:raise AssertionError(report.get('error',report['assessment']))
     finally:
         kubectl('-n','demo','delete','pod',NAME,'--ignore-not-found=true','--wait=true')
         kubectl('-n','demo','delete','secret',NAME+'-token','auth-gateway-client-benchmark','--ignore-not-found=true')

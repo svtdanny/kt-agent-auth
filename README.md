@@ -47,6 +47,7 @@ python3 scripts/test_key_injection.py
 python3 scripts/test_permissions.py
 python3 scripts/test_shared_gateway.py
 python3 scripts/benchmark.py
+python3 scripts/benchmark_shared_gateway.py
 ```
 
 Every Kubernetes operation targets local Minikube profile `auth-demo` through `.cache/kubeconfig`; the user's default kubeconfig context is not used. Setup uses a loopback registry on port 5001 and a separate `demo` namespace. Setup also installs the opted-in command Pod and an external Docker HTTPS fixture. Both native Sessions and the Pod use the same `atenet-egress.ate-system.svc` Service: port 443 for Actor certificates and port 8443 for Pod certificates. A deterministic model drives the real Mastra agent loop and HTTP/command tool without a paid provider or provider credentials.
@@ -268,27 +269,42 @@ The [Minikube integration results](artifacts/e2e-results.json) cover 20 checks u
 
 [PostgreSQL integration results](artifacts/postgres-tests.json) cover 32 concurrent Session retries and Pod registrations, immutable bindings, persistence across independent pools, shared revocation, retention/tombstones, and one-time import preserving revoked/purged state. Go race tests also cover Pod UID/ServiceAccount UID replacement and deletion, expired-watch relist recovery, disconnected snapshot use, partial-scan cleanup safety, suspended Sessions, bounded policy-version retries, Vault cache coalescing, safe invalidation during in-flight reads, and error redaction.
 
-`scripts/benchmark.py` runs bounded closed-loop load in a temporary Pod, captures deployment images, configuration, resource samples, and before/after authority counters, then removes its temporary Sessions and credentials. Full-path stages execute real Mastra HTTP tools inside two native Sessions; request latency includes sandbox networking, gateway, processor, bridge, PostgreSQL, and catalog API. A2A setup/response time is reported separately. Direct processor stages exclude gateway/upstream and assert a real Session SPIFFE ID using the gateway client certificate; they do not measure gateway identity verification.
+`scripts/benchmark.py` runs bounded closed-loop load in a temporary Pod, captures deployment images, configuration, resource samples, and before/after authority counters, then removes its temporary Sessions and credentials. Full-path stages execute real Mastra HTTP tools inside two native Sessions; request latency includes sandbox networking, gateway, processor, bridge, PostgreSQL, and catalog API. A2A setup/response time is reported separately. Direct processor stages exclude gateway/upstream and assert a real Session SPIFFE ID using the gateway client certificate; they do not measure gateway identity verification. The runner exits unsuccessfully if authorization, credential, upstream-count, recovery, or warm-cache checks fail.
+
+`scripts/benchmark_shared_gateway.py` adds full-path load from both native Sessions and the captured command Pod to the internal HTTP MCP mock and the external HTTPS fixture. It measures concurrency 1, 8, and 32, denied requests, and a mixed stage with 80 concurrent requests across both callers, both destinations, and a native writer using a different ServiceAccount/key. Upstream audit deltas verify every successful request and show that denied traffic never reaches a target. It records recovery, container restarts (including the Pod relay), and five-second resource samples. Run the two benchmarks sequentially.
 
 The shared PostgreSQL server keeps `max_connections=100`. Connection budgets are bridge 4, kagent 8, and Substrate API 8 per replica. Native components retain additional dedicated pools. These supported configuration settings avoid CPU-derived defaults exhausting the shared server. No upstream source patch or PostgreSQL server limit increase was needed.
 
 <!-- benchmark-results:start -->
-The historical agentgateway [Vault-backed run](artifacts/benchmark-results.json), started at `2026-10-24T14:31:06Z`, completed in 121.0 seconds:
+The [shared Envoy native-path run](artifacts/benchmark-results.json), started at `2026-10-24T22:42:20Z`, completed in 110.9 seconds:
 
-| Concurrent reader GETs | Successful / attempted | Successful requests/sec, before Vault → Vault | p95 latency, before Vault → Vault |
+| Concurrent reader GETs | Successful / attempted | Requests/sec | p95 latency |
 | --- | --- | --- | --- |
-| 1 | 3,438 / 3,438 | 165.79 → 171.87 | 7.28 → 6.96 ms |
-| 4 | 1,279 / 1,279 | 215.03 → 212.83 | 68.29 → 69.23 ms |
-| 16 | 1,608 / 1,608 | 246.84 → 265.76 | 116.73 → 111.41 ms |
-| 64 | 1,444 / 1,444 | 238.78 → 231.89 | 689.17 → 700.93 ms |
+| 1 | 5,513 / 5,513 | 275.62 | 4.44 ms |
+| 4 | 2,823 / 2,823 | 470.27 | 25.41 ms |
+| 16 | 1,790 / 1,790 | 295.55 | 102.57 ms |
+| 64 | 1,393 / 1,393 | 227.36 | 806.04 ms |
 
-The previous column is the same PostgreSQL bridge with Kubernetes Secret watches. These are separate bounded local runs; differences do not establish a Vault performance advantage. The writer POST stage completed 1,341/1,341 requests at 223.16 requests/sec; all 1,646 forbidden reader POSTs were blocked before upstream. Direct mixed ext_proc traffic at concurrency 128 completed 2,020 requests at 382.76 requests/sec with p95 593.69 ms.
+The writer POST stage completed 2,873/2,873 requests at 478.10 requests/sec; all 2,591 forbidden reader POSTs were blocked before upstream. Direct mixed ext_proc traffic at concurrency 128 completed 2,000 requests at 384.14 requests/sec with p95 699.66 ms. Higher concurrency increased latency and reduced native throughput; the bridge and processor each retain a one-CPU limit.
 
-Across all stages: **zero authorization bypasses, wrong credentials, failed allowed HTTP requests, direct unexpected denials, or direct transport errors**. All upstream audit counts matched successful requests. Three recovery reads succeeded in 14.05 seconds. Warm traffic recorded **zero ServiceAccount GETs, zero Vault reads/logins, zero LIST calls, and zero native Session GETs**. Nine bridge TokenReviews were for public actions rather than individual HTTP requests. The measured interval contained 39,479 context requests and 15,640 grant requests.
+Across all native and direct stages: **zero authorization bypasses, wrong credentials, failed allowed HTTP requests, direct unexpected denials, missing credential mutations, or direct transport errors**. All upstream audit counts matched successful requests. Three recovery reads succeeded in 13.81 seconds. Warm traffic recorded **zero ServiceAccount/Pod GETs, zero Vault reads/logins, zero LIST calls, and zero native Session GETs**. Nine bridge TokenReviews were for public actions rather than individual HTTP requests. The measured interval contained 47,805 context requests and 19,872 grant requests.
 
-Five-second samples observed peaks of approximately 0.86 CPU cores / 17.6 MiB working set for the processor and 0.80 CPU cores / 19.7 MiB for the bridge. These are sampled values, not instantaneous maxima.
+Five-second samples observed peaks of approximately 0.67 CPU cores / 15.4 MiB working set for the processor and 0.96 CPU cores / 29.5 MiB for the bridge. These are sampled values, not instantaneous maxima.
+
+The [shared Envoy two-caller run](artifacts/benchmark-shared-envoy-results.json), started at `2026-10-24T22:44:47Z`, completed in 151.5 seconds. These are separate six-second stages for each caller/target:
+
+| Caller | Target | Requests/sec at concurrency 8 | p95 at concurrency 8 | p95 at concurrency 32 |
+| --- | --- | --- | --- | --- |
+| Native kagent / fetch | Internal MCP mock | 386.71 | 59.37 ms | 205.38 ms |
+| Native kagent / fetch | External HTTPS fixture | 352.89 | 60.91 ms | 210.03 ms |
+| Captured Pod / curl command | Internal MCP mock | 86.08 | 176.53 ms | 692.59 ms |
+| Captured Pod / curl command | External HTTPS fixture | 60.54 | 197.55 ms | 890.48 ms |
+
+All 16,378 allowed requests succeeded and all 5,224 forbidden requests returned 403 without reaching a target. The mixed stage offered 80 concurrent requests: native MCP, native external HTTPS, Pod MCP, Pod external HTTPS, and a native catalog writer, each at concurrency 16. All 3,571 mixed requests succeeded with the correct target key and ServiceAccount permissions. Its upstream audit deltas matched exactly: MCP 1,379, external 1,305, catalog 887. Total throughput including invocation setup/drain was 237.61 requests/sec; per-stream p95 ranged from 342.94 to 777.67 ms.
+
+There were **zero wrong credentials, bypasses, transport errors, container restarts, or workload replacements**. All five caller/target combinations succeeded again after load. Warm counters recorded zero ServiceAccount/Pod/native Session GETs, zero LIST calls, and zero Vault reads/logins. Eleven TokenReviews authenticated the public invocation actions. The command Pod spawns a new curl process and connection per request; its one-CPU application container reached a sampled 0.95 CPU cores. Its throughput is a measurement of that command execution path, rather than a standalone Envoy capacity measurement.
 <!-- benchmark-results:end -->
 
-Historical evidence is retained: [before Vault](artifacts/benchmark-results-before-vault.json), [uncached](artifacts/benchmark-results-uncached.json), [cache only](artifacts/benchmark-results-cache-only.json), [bbolt + TTL + batching](artifacts/benchmark-results-before-reimplementation.json), and [first watch/PostgreSQL run before connection budgeting](artifacts/benchmark-results-watch-pg-before-pool-budget.json). The latter had 59 failed allowed requests caused by PostgreSQL connection exhaustion. Earlier comparisons include storage, watch strategy, removal of hot-path native Session reads, and pool-budget configuration changes.
+Historical evidence is retained: [Vault-backed agentgateway](artifacts/benchmark-results-agentgateway.json), [before Vault](artifacts/benchmark-results-before-vault.json), [uncached](artifacts/benchmark-results-uncached.json), [cache only](artifacts/benchmark-results-cache-only.json), [bbolt + TTL + batching](artifacts/benchmark-results-before-reimplementation.json), and [first watch/PostgreSQL run before connection budgeting](artifacts/benchmark-results-watch-pg-before-pool-budget.json). The latter had 59 failed allowed requests caused by PostgreSQL connection exhaustion. Earlier comparisons include storage, watch strategy, removal of hot-path native Session reads, and pool-budget configuration changes. Separate local runs do not establish a performance advantage for a particular gateway or credential store.
 
-The benchmark above predates the shared Envoy deployment. It is a single-node local benchmark with one bridge and one processor replica, bounded stage durations, and closed-loop concurrency. It establishes the MVP's behavior and measured limits; it is not an overnight soak or a production capacity guarantee.
+These are single-node local benchmarks with one gateway, bridge, and processor replica, bounded stage durations, and closed-loop concurrency. They establish the MVP's behavior and measured limits; they are not overnight soaks or production capacity guarantees.
