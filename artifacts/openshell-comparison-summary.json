@@ -1,0 +1,313 @@
+{
+  "totalRequests": 136107,
+  "stages": 60,
+  "elapsedSeconds": 467.9428795540007,
+  "assessment": {
+    "allowedWorkloadFailures": 0,
+    "transportErrors": 0,
+    "wrongCredentialResponses": 0,
+    "allUpstreamAuditsMatch": true,
+    "allStagesMeasured": true
+  },
+  "groups": [
+    {
+      "source": "ours/kagent-fetch",
+      "target": "mcp",
+      "concurrency": 1,
+      "requests": 2730,
+      "requestsPerSecond": 227.37929000047274,
+      "p95MinMs": 5.1552560000000085,
+      "p95MaxMs": 5.185136000000057
+    },
+    {
+      "source": "openshell/fetch",
+      "target": "mcp",
+      "concurrency": 1,
+      "requests": 7349,
+      "requestsPerSecond": 612.3978197665309,
+      "p95MinMs": 1.7577000000164844,
+      "p95MaxMs": 2.0891690000025847
+    },
+    {
+      "source": "ours/pod-fetch",
+      "target": "mcp",
+      "concurrency": 1,
+      "requests": 4015,
+      "requestsPerSecond": 334.17346954486504,
+      "p95MinMs": 3.3846060037612915,
+      "p95MaxMs": 3.6572230011224747
+    },
+    {
+      "source": "ours/pod-curl",
+      "target": "mcp",
+      "concurrency": 1,
+      "requests": 719,
+      "requestsPerSecond": 59.79228406673539,
+      "p95MinMs": 18.884712994098663,
+      "p95MaxMs": 19.844879999756813
+    },
+    {
+      "source": "openshell/curl",
+      "target": "mcp",
+      "concurrency": 1,
+      "requests": 702,
+      "requestsPerSecond": 58.46634092265866,
+      "p95MinMs": 19.980933999991976,
+      "p95MaxMs": 20.265411000000313
+    },
+    {
+      "source": "ours/kagent-fetch",
+      "target": "external",
+      "concurrency": 1,
+      "requests": 2911,
+      "requestsPerSecond": 242.5153056680845,
+      "p95MinMs": 5.0016709999999875,
+      "p95MaxMs": 5.010820999999851
+    },
+    {
+      "source": "openshell/fetch",
+      "target": "external",
+      "concurrency": 1,
+      "requests": 8151,
+      "requestsPerSecond": 679.1680608071499,
+      "p95MinMs": 1.616256000008434,
+      "p95MaxMs": 1.8506819999965956
+    },
+    {
+      "source": "ours/pod-fetch",
+      "target": "external",
+      "concurrency": 1,
+      "requests": 4190,
+      "requestsPerSecond": 349.10909299148045,
+      "p95MinMs": 3.3225440084934235,
+      "p95MaxMs": 3.4975390136241913
+    },
+    {
+      "source": "ours/pod-curl",
+      "target": "external",
+      "concurrency": 1,
+      "requests": 655,
+      "requestsPerSecond": 54.469957430565955,
+      "p95MinMs": 20.550669997930527,
+      "p95MaxMs": 20.820438012480736
+    },
+    {
+      "source": "openshell/curl",
+      "target": "external",
+      "concurrency": 1,
+      "requests": 250,
+      "requestsPerSecond": 20.70706938763302,
+      "p95MinMs": 51.12713199999416,
+      "p95MaxMs": 54.60758100000385
+    },
+    {
+      "source": "ours/kagent-fetch",
+      "target": "mcp",
+      "concurrency": 8,
+      "requests": 4598,
+      "requestsPerSecond": 382.1773385856165,
+      "p95MinMs": 54.1195459999999,
+      "p95MaxMs": 62.12013300000035
+    },
+    {
+      "source": "openshell/fetch",
+      "target": "mcp",
+      "concurrency": 8,
+      "requests": 15906,
+      "requestsPerSecond": 1324.8024215313394,
+      "p95MinMs": 15.293232000025455,
+      "p95MaxMs": 18.127492000014172
+    },
+    {
+      "source": "ours/pod-fetch",
+      "target": "mcp",
+      "concurrency": 8,
+      "requests": 4535,
+      "requestsPerSecond": 375.84854878285427,
+      "p95MinMs": 54.413093999028206,
+      "p95MaxMs": 58.70736598968506
+    },
+    {
+      "source": "ours/pod-curl",
+      "target": "mcp",
+      "concurrency": 8,
+      "requests": 984,
+      "requestsPerSecond": 81.5805456161548,
+      "p95MinMs": 179.62563799321651,
+      "p95MaxMs": 179.73967100679874
+    },
+    {
+      "source": "openshell/curl",
+      "target": "mcp",
+      "concurrency": 8,
+      "requests": 598,
+      "requestsPerSecond": 49.00459967432374,
+      "p95MinMs": 213.25633600000583,
+      "p95MaxMs": 226.51594000001205
+    },
+    {
+      "source": "ours/kagent-fetch",
+      "target": "external",
+      "concurrency": 8,
+      "requests": 4196,
+      "requestsPerSecond": 348.7776984357925,
+      "p95MinMs": 52.10728100000051,
+      "p95MaxMs": 55.90863799999988
+    },
+    {
+      "source": "openshell/fetch",
+      "target": "external",
+      "concurrency": 8,
+      "requests": 18560,
+      "requestsPerSecond": 1542.5910447145918,
+      "p95MinMs": 11.093192999993335,
+      "p95MaxMs": 11.772842000005767
+    },
+    {
+      "source": "ours/pod-fetch",
+      "target": "external",
+      "concurrency": 8,
+      "requests": 4180,
+      "requestsPerSecond": 346.92143669099016,
+      "p95MinMs": 49.716063007712364,
+      "p95MaxMs": 59.58158099651337
+    },
+    {
+      "source": "ours/pod-curl",
+      "target": "external",
+      "concurrency": 8,
+      "requests": 744,
+      "requestsPerSecond": 61.35545039449106,
+      "p95MinMs": 196.20830500125885,
+      "p95MaxMs": 202.66367800533772
+    },
+    {
+      "source": "openshell/curl",
+      "target": "external",
+      "concurrency": 8,
+      "requests": 183,
+      "requestsPerSecond": 14.475293137589233,
+      "p95MinMs": 694.7840220000071,
+      "p95MaxMs": 695.1042310000048
+    },
+    {
+      "source": "ours/kagent-fetch",
+      "target": "mcp",
+      "concurrency": 32,
+      "requests": 3446,
+      "requestsPerSecond": 282.4570667219635,
+      "p95MinMs": 201.57534899999973,
+      "p95MaxMs": 203.97228300000006
+    },
+    {
+      "source": "openshell/fetch",
+      "target": "mcp",
+      "concurrency": 32,
+      "requests": 16532,
+      "requestsPerSecond": 1375.8889800381908,
+      "p95MinMs": 69.5399220000254,
+      "p95MaxMs": 72.19856700001401
+    },
+    {
+      "source": "ours/pod-fetch",
+      "target": "mcp",
+      "concurrency": 32,
+      "requests": 3486,
+      "requestsPerSecond": 285.77822335079463,
+      "p95MinMs": 191.90963399410248,
+      "p95MaxMs": 196.35534898936749
+    },
+    {
+      "source": "ours/pod-curl",
+      "target": "mcp",
+      "concurrency": 32,
+      "requests": 955,
+      "requestsPerSecond": 79.03060667919104,
+      "p95MinMs": 701.8642410039902,
+      "p95MaxMs": 765.9556589871645
+    },
+    {
+      "source": "openshell/curl",
+      "target": "mcp",
+      "concurrency": 32,
+      "requests": 583,
+      "requestsPerSecond": 47.852927011634904,
+      "p95MinMs": 1185.575847,
+      "p95MaxMs": 1190.6986920000054
+    },
+    {
+      "source": "ours/kagent-fetch",
+      "target": "external",
+      "concurrency": 32,
+      "requests": 3148,
+      "requestsPerSecond": 259.6493567142813,
+      "p95MinMs": 196.99290500000006,
+      "p95MaxMs": 217.56495499999983
+    },
+    {
+      "source": "openshell/fetch",
+      "target": "external",
+      "concurrency": 32,
+      "requests": 17398,
+      "requestsPerSecond": 1447.2566907078804,
+      "p95MinMs": 57.52822300000116,
+      "p95MaxMs": 60.061404000007315
+    },
+    {
+      "source": "ours/pod-fetch",
+      "target": "external",
+      "concurrency": 32,
+      "requests": 3492,
+      "requestsPerSecond": 285.19965644545084,
+      "p95MinMs": 196.51861399412155,
+      "p95MaxMs": 202.58606599271297
+    },
+    {
+      "source": "ours/pod-curl",
+      "target": "external",
+      "concurrency": 32,
+      "requests": 732,
+      "requestsPerSecond": 60.457215042710345,
+      "p95MinMs": 914.4209080040455,
+      "p95MaxMs": 916.8736370056868
+    },
+    {
+      "source": "openshell/curl",
+      "target": "external",
+      "concurrency": 32,
+      "requests": 179,
+      "requestsPerSecond": 13.623209083315905,
+      "p95MinMs": 3469.499141999986,
+      "p95MaxMs": 3506.4886750000005
+    }
+  ],
+  "latencyAggregation": "Min/max of the two individual stage p95 values; not a pooled percentile.",
+  "rateAggregation": "Total completed requests divided by total tool execution time across repetitions.",
+  "openshellFunctional": {
+    "completed": true,
+    "checks": 35
+  },
+  "openshellCredentials": {
+    "completed": true,
+    "checks": 8
+  },
+  "baselineFunctional": {
+    "completed": true,
+    "checks": 59
+  },
+  "lifecycle": {
+    "openshell": {
+      "sameSandboxId": true,
+      "persistentWorkspacePreserved": true,
+      "memoryPreserved": false,
+      "tmpPreserved": false
+    },
+    "kagent": {
+      "sameSessionId": true,
+      "persistentDataPreserved": true,
+      "memoryPreserved": false,
+      "tmpPreserved": false,
+      "bindingPreserved": true
+    }
+  }
+}

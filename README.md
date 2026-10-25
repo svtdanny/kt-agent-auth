@@ -6,6 +6,8 @@ The demo runs released kagent `1.0.0-alpha17` and Substrate `0.6.0-alpha3` with 
 
 Complete communication diagrams: [architecture and watch flow](docs/architecture.md). Editable Mermaid sources: [architecture](docs/architecture-current.mmd), [watches](docs/architecture-watch-cache.mmd).
 
+An isolated [OpenShell pilot](pilots/openshell/README.md) compares native capabilities, Vault credential handling, matched performance, and actual memory/disk behavior across stop/start and kagent suspend/resume. Its scripts use a separate Minikube cluster and preserve this demo's main deployment.
+
 ```mermaid
 flowchart TB
     subgraph CLUSTER["One Kubernetes cluster"]

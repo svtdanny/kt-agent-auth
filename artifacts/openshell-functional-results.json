@@ -1,0 +1,314 @@
+{
+  "startedAtUTC": "2026-10-25T17:06:10.972484+00:00",
+  "cluster": "openshell-pilot",
+  "version": "0.1.5",
+  "completed": true,
+  "tests": [
+    {
+      "test": "sandbox ready with hard-required Landlock and opaque provider placeholders",
+      "passed": true
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "http",
+      "target": "mcp",
+      "grants": [],
+      "allowed": false,
+      "upstreamDelta": 0,
+      "policyApplyWallSeconds": 1.0581287699751556
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "http",
+      "target": "external",
+      "grants": [],
+      "allowed": false,
+      "upstreamDelta": 0,
+      "policyApplyWallSeconds": 1.0581287699751556
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "command",
+      "target": "mcp",
+      "grants": [],
+      "allowed": false,
+      "upstreamDelta": 0,
+      "policyApplyWallSeconds": 1.0581287699751556
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "command",
+      "target": "external",
+      "grants": [],
+      "allowed": false,
+      "upstreamDelta": 0,
+      "policyApplyWallSeconds": 1.0581287699751556
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "http",
+      "target": "mcp",
+      "grants": [
+        "external"
+      ],
+      "allowed": false,
+      "upstreamDelta": 0,
+      "policyApplyWallSeconds": 1.0604157450143248
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "http",
+      "target": "external",
+      "grants": [
+        "external"
+      ],
+      "allowed": true,
+      "upstreamDelta": 1,
+      "policyApplyWallSeconds": 1.0604157450143248
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "command",
+      "target": "mcp",
+      "grants": [
+        "external"
+      ],
+      "allowed": false,
+      "upstreamDelta": 0,
+      "policyApplyWallSeconds": 1.0604157450143248
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "command",
+      "target": "external",
+      "grants": [
+        "external"
+      ],
+      "allowed": true,
+      "upstreamDelta": 1,
+      "policyApplyWallSeconds": 1.0604157450143248
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "http",
+      "target": "mcp",
+      "grants": [
+        "mcp"
+      ],
+      "allowed": true,
+      "upstreamDelta": 1,
+      "policyApplyWallSeconds": 1.0592767720809206
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "http",
+      "target": "external",
+      "grants": [
+        "mcp"
+      ],
+      "allowed": false,
+      "upstreamDelta": 0,
+      "policyApplyWallSeconds": 1.0592767720809206
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "command",
+      "target": "mcp",
+      "grants": [
+        "mcp"
+      ],
+      "allowed": true,
+      "upstreamDelta": 1,
+      "policyApplyWallSeconds": 1.0592767720809206
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "command",
+      "target": "external",
+      "grants": [
+        "mcp"
+      ],
+      "allowed": false,
+      "upstreamDelta": 0,
+      "policyApplyWallSeconds": 1.0592767720809206
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "http",
+      "target": "mcp",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "allowed": true,
+      "upstreamDelta": 1,
+      "policyApplyWallSeconds": 1.057546903961338
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "http",
+      "target": "external",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "allowed": true,
+      "upstreamDelta": 1,
+      "policyApplyWallSeconds": 1.057546903961338
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "command",
+      "target": "mcp",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "allowed": true,
+      "upstreamDelta": 1,
+      "policyApplyWallSeconds": 1.057546903961338
+    },
+    {
+      "test": "permission subset through Mastra",
+      "passed": true,
+      "mode": "command",
+      "target": "external",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "allowed": true,
+      "upstreamDelta": 1,
+      "policyApplyWallSeconds": 1.057546903961338
+    },
+    {
+      "test": "forbidden method/path blocked before upstream",
+      "passed": true,
+      "mode": "http",
+      "target": "mcp"
+    },
+    {
+      "test": "literal forged key is rejected by upstream rather than overwritten",
+      "passed": true,
+      "mode": "http",
+      "target": "mcp",
+      "status": 401
+    },
+    {
+      "test": "cross-destination credential placeholder blocked before upstream",
+      "passed": true,
+      "mode": "http",
+      "target": "mcp"
+    },
+    {
+      "test": "forbidden method/path blocked before upstream",
+      "passed": true,
+      "mode": "http",
+      "target": "external"
+    },
+    {
+      "test": "literal forged key is rejected by upstream rather than overwritten",
+      "passed": true,
+      "mode": "http",
+      "target": "external",
+      "status": 401
+    },
+    {
+      "test": "cross-destination credential placeholder blocked before upstream",
+      "passed": true,
+      "mode": "http",
+      "target": "external"
+    },
+    {
+      "test": "forbidden method/path blocked before upstream",
+      "passed": true,
+      "mode": "command",
+      "target": "mcp"
+    },
+    {
+      "test": "literal forged key is rejected by upstream rather than overwritten",
+      "passed": true,
+      "mode": "command",
+      "target": "mcp",
+      "status": 401
+    },
+    {
+      "test": "cross-destination credential placeholder blocked before upstream",
+      "passed": true,
+      "mode": "command",
+      "target": "mcp"
+    },
+    {
+      "test": "forbidden method/path blocked before upstream",
+      "passed": true,
+      "mode": "command",
+      "target": "external"
+    },
+    {
+      "test": "literal forged key is rejected by upstream rather than overwritten",
+      "passed": true,
+      "mode": "command",
+      "target": "external",
+      "status": 401
+    },
+    {
+      "test": "cross-destination credential placeholder blocked before upstream",
+      "passed": true,
+      "mode": "command",
+      "target": "external"
+    },
+    {
+      "test": "enforced NetworkPolicy blocks a process launched outside mediation",
+      "passed": true,
+      "curlExit": 1
+    },
+    {
+      "test": "unrelated Pod retains direct cluster access",
+      "passed": true
+    },
+    {
+      "test": "built-in MCP tool request filtering",
+      "passed": true,
+      "tool": "read_status",
+      "status": 200,
+      "upstreamDelta": 1
+    },
+    {
+      "test": "built-in MCP tool request filtering",
+      "passed": true,
+      "tool": "delete_resource",
+      "status": 403,
+      "upstreamDelta": 0
+    },
+    {
+      "test": "public Internet HTTPS without credentials",
+      "passed": true,
+      "binary": "curl"
+    },
+    {
+      "test": "public Internet HTTPS without credentials",
+      "passed": true,
+      "binary": "node"
+    }
+  ],
+  "limitations": [
+    "MCP admission checks use valid JSON-RPC request payloads against an HTTP authentication mock; this is not a complete MCP client/server integration."
+  ],
+  "sandboxId": "405d223a-615d-4a1d-82eb-708ab6040039",
+  "finishedAtUTC": "2026-10-25T17:06:25.016099+00:00"
+}

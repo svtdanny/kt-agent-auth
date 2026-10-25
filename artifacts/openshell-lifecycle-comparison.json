@@ -1,0 +1,99 @@
+{
+  "startedAtUTC": "2026-10-25T17:18:54.901257+00:00",
+  "completed": true,
+  "openshell": {
+    "manualProcessFreeze": {
+      "seconds": 3,
+      "memoryPreserved": true,
+      "releasesRAM": false,
+      "nativeOpenShellPauseAPI": false,
+      "before": {
+        "memoryToken": "19605b42-3c57-48fd-aa05-d30d3f4669b0",
+        "ticks": 7897,
+        "startedAt": "2026-10-25T17:05:44.374Z",
+        "pid": 56,
+        "persistentToken": "6aab54d9-ed7d-4c64-940f-571da1132eea",
+        "temporaryToken": "aaba5588-d3af-4bc9-97fb-e5b683491895",
+        "directory": "/sandbox/pilot-state"
+      },
+      "after": {
+        "memoryToken": "19605b42-3c57-48fd-aa05-d30d3f4669b0",
+        "ticks": 7899,
+        "startedAt": "2026-10-25T17:05:44.374Z",
+        "pid": 56,
+        "persistentToken": "6aab54d9-ed7d-4c64-940f-571da1132eea",
+        "temporaryToken": "aaba5588-d3af-4bc9-97fb-e5b683491895",
+        "directory": "/sandbox/pilot-state"
+      }
+    },
+    "stopStart": {
+      "stopWallSeconds": 3.0875969579210505,
+      "startWallSeconds": 3.505846997955814,
+      "sameSandboxId": true,
+      "persistentWorkspacePreserved": true,
+      "memoryPreserved": false,
+      "tmpPreserved": false,
+      "oldGeneration": "e270a13d-4d5c-4737-8d2b-8335719e191c",
+      "newGeneration": "4f38c7db-34b8-4e9b-a3d0-fa9521ddc2a7",
+      "before": {
+        "memoryToken": "19605b42-3c57-48fd-aa05-d30d3f4669b0",
+        "ticks": 7897,
+        "startedAt": "2026-10-25T17:05:44.374Z",
+        "pid": 56,
+        "persistentToken": "6aab54d9-ed7d-4c64-940f-571da1132eea",
+        "temporaryToken": "aaba5588-d3af-4bc9-97fb-e5b683491895",
+        "directory": "/sandbox/pilot-state"
+      },
+      "after": {
+        "memoryToken": "6d700871-73cc-4a7a-85d4-41500d37d3b7",
+        "ticks": 4,
+        "startedAt": "2026-10-25T17:19:08.787Z",
+        "pid": 56,
+        "persistentToken": "6aab54d9-ed7d-4c64-940f-571da1132eea",
+        "temporaryToken": "b4324852-d358-4005-a0a0-2e8de8f07b20",
+        "directory": "/sandbox/pilot-state"
+      }
+    }
+  },
+  "kagent": {
+    "sessionId": "01a17413-0cb1-7e36-b4e1-a6f3b8e3cc68",
+    "sameSessionId": true,
+    "suspend": {
+      "elapsedSeconds": 0.104145568,
+      "operation": "RUNTIME_OPERATION_NONE",
+      "sessionId": "01a17413-0cb1-7e36-b4e1-a6f3b8e3cc68",
+      "state": "RUNTIME_STATE_SUSPENDED"
+    },
+    "resume": {
+      "elapsedSeconds": 2.644996902,
+      "operation": "RUNTIME_OPERATION_NONE",
+      "sessionId": "01a17413-0cb1-7e36-b4e1-a6f3b8e3cc68",
+      "state": "RUNTIME_STATE_READY"
+    },
+    "persistentDataPreserved": true,
+    "memoryPreserved": false,
+    "tmpPreserved": false,
+    "bindingPreserved": true,
+    "authorizedTrafficAfterResume": true,
+    "before": {
+      "memoryToken": "ff85e757-e84e-4911-8fed-65aec96e2b0d",
+      "ticks": 4,
+      "startedAt": "2026-10-25T17:19:28.686Z",
+      "pid": 6,
+      "persistentToken": "59aa8d58-5f2b-4f67-ad28-7dfb1515dc98",
+      "temporaryToken": "78afdd0d-819e-4ef4-bf6f-4e0991789b38",
+      "directory": "/data/pilot-state"
+    },
+    "after": {
+      "memoryToken": "118ab031-6a97-41a4-afc6-e00b3055a80b",
+      "ticks": 25,
+      "startedAt": "2026-10-25T17:19:39.274Z",
+      "pid": 6,
+      "persistentToken": "59aa8d58-5f2b-4f67-ad28-7dfb1515dc98",
+      "temporaryToken": "562473fc-aa16-46eb-914a-a042677ac9ea",
+      "directory": "/data/pilot-state"
+    },
+    "configuredSnapshotFidelity": "SNAPSHOT_FIDELITY_VOLUMES"
+  },
+  "finishedAtUTC": "2026-10-25T17:19:48.553139+00:00"
+}

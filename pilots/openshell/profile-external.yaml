@@ -1,0 +1,13 @@
+id: pilot-external
+display_name: Pilot external
+category: data
+credentials:
+- name: api_token
+  env_vars:
+  - PILOT_EXTERNAL_TOKEN
+  required: true
+  stable_placeholder: true
+endpoints: []
+binaries:
+- /usr/local/bin/node
+- /usr/bin/curl

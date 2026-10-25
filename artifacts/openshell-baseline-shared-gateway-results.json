@@ -1,0 +1,784 @@
+{
+  "completed": true,
+  "cluster": "auth-demo",
+  "startedAtUTC": "2026-10-25T17:29:50.329823+00:00",
+  "finishedAtUTC": "2026-10-25T17:32:25.698768+00:00",
+  "gatewayPodUid": "a38c95e6-7028-4fc2-8b6c-39d6589b088f",
+  "sessionId": "01a1741c-90fe-7322-b9e6-ab29885a525a",
+  "writerSessionId": "01a1741e-589d-7488-8c98-7036bd2d86c6",
+  "podUid": "53e14d2a-ff67-4259-8dfb-fc0efe23abde",
+  "externalFixture": {
+    "hostname": "external-api.auth-demo.test",
+    "ip": "192.168.49.4",
+    "dockerContainer": "auth-demo-external-api",
+    "dockerNetwork": "auth-demo",
+    "location": "Docker container outside Kubernetes; no Kubernetes Service/Endpoint"
+  },
+  "gatewayImages": [
+    {
+      "allocatedResources": {
+        "cpu": "50m",
+        "memory": "64Mi"
+      },
+      "containerID": "containerd://444496d06920b747f73af350c70ad45ac4659388a7fb5c19d6ff96cf7f264d41",
+      "image": "docker.io/envoyproxy/envoy:v1.38.6",
+      "imageID": "sha256:cddb13d525313aea436f66f5cbe1ce84dd3c0168a0bf8a3b8e9e9c3627f0c894",
+      "lastState": {},
+      "name": "envoy",
+      "ready": true,
+      "resources": {
+        "limits": {
+          "cpu": "2",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "64Mi"
+        }
+      },
+      "restartCount": 0,
+      "started": true,
+      "state": {
+        "running": {
+          "startedAt": "2026-10-24T22:12:21Z"
+        }
+      },
+      "user": {
+        "linux": {
+          "gid": 65532,
+          "supplementalGroups": [
+            65532
+          ],
+          "uid": 65532
+        }
+      },
+      "volumeMounts": [
+        {
+          "mountPath": "/etc/envoy",
+          "name": "config",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        },
+        {
+          "mountPath": "/var/run/sdsmint",
+          "name": "sdsmint-sock"
+        },
+        {
+          "mountPath": "/run/servicedns.podcert.ate.dev",
+          "name": "servicedns",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        },
+        {
+          "mountPath": "/run/podidentity.podcert.ate.dev",
+          "name": "podidentity",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        },
+        {
+          "mountPath": "/run/actor-id-ca-certs",
+          "name": "actor-id-ca-certs",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        },
+        {
+          "mountPath": "/auth-client",
+          "name": "auth-client",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        },
+        {
+          "mountPath": "/pod-tls",
+          "name": "pod-tls",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        },
+        {
+          "mountPath": "/trust",
+          "name": "trust",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        }
+      ]
+    },
+    {
+      "allocatedResources": {
+        "cpu": "50m",
+        "memory": "64Mi"
+      },
+      "containerID": "containerd://8dfeda9ac7e6a0a1ed91b88a57e9b7a98d6984c66ae84fd278cda7ee838439c3",
+      "image": "localhost:5001/auth-demo/substrate-atenet:demo",
+      "imageID": "sha256:b1d85b198e09809ab6fb40b565cb1e59a9e719168541fe441e7f835dcbd63ba6",
+      "lastState": {},
+      "name": "native-egress",
+      "ready": true,
+      "resources": {
+        "limits": {
+          "cpu": "2",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "64Mi"
+        }
+      },
+      "restartCount": 0,
+      "started": true,
+      "state": {
+        "running": {
+          "startedAt": "2026-10-24T22:12:21Z"
+        }
+      },
+      "user": {
+        "linux": {
+          "gid": 65532,
+          "supplementalGroups": [
+            65532
+          ],
+          "uid": 65532
+        }
+      },
+      "volumeMounts": [
+        {
+          "mountPath": "/run/servicedns.podcert.ate.dev",
+          "name": "servicedns",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        },
+        {
+          "mountPath": "/run/podidentity.podcert.ate.dev",
+          "name": "podidentity",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        },
+        {
+          "mountPath": "/run/actor-id-ca-certs",
+          "name": "actor-id-ca-certs",
+          "readOnly": true,
+          "recursiveReadOnly": "Disabled"
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "test": "one shared Envoy gateway with native authorization and SDS issuer",
+      "passed": true,
+      "gatewayPodUid": "a38c95e6-7028-4fc2-8b6c-39d6589b088f",
+      "externalFixture": {
+        "hostname": "external-api.auth-demo.test",
+        "ip": "192.168.49.4",
+        "dockerContainer": "auth-demo-external-api",
+        "dockerNetwork": "auth-demo",
+        "location": "Docker container outside Kubernetes; no Kubernetes Service/Endpoint"
+      }
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "catalog",
+      "grants": [],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "mcp",
+      "grants": [],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "external",
+      "grants": [],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "catalog",
+      "grants": [],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "mcp",
+      "grants": [],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "external",
+      "grants": [],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "catalog",
+      "grants": [
+        "external"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "mcp",
+      "grants": [
+        "external"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "external",
+      "grants": [
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "catalog",
+      "grants": [
+        "external"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "mcp",
+      "grants": [
+        "external"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "external",
+      "grants": [
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "catalog",
+      "grants": [
+        "mcp"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "mcp",
+      "grants": [
+        "mcp"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "external",
+      "grants": [
+        "mcp"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "catalog",
+      "grants": [
+        "mcp"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "mcp",
+      "grants": [
+        "mcp"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "external",
+      "grants": [
+        "mcp"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "catalog",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "mcp",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "external",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "catalog",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "mcp",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "external",
+      "grants": [
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "catalog",
+      "grants": [
+        "catalog"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "mcp",
+      "grants": [
+        "catalog"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "external",
+      "grants": [
+        "catalog"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "catalog",
+      "grants": [
+        "catalog"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "mcp",
+      "grants": [
+        "catalog"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "external",
+      "grants": [
+        "catalog"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "catalog",
+      "grants": [
+        "catalog",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "mcp",
+      "grants": [
+        "catalog",
+        "external"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "external",
+      "grants": [
+        "catalog",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "catalog",
+      "grants": [
+        "catalog",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "mcp",
+      "grants": [
+        "catalog",
+        "external"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "external",
+      "grants": [
+        "catalog",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "catalog",
+      "grants": [
+        "catalog",
+        "mcp"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "mcp",
+      "grants": [
+        "catalog",
+        "mcp"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "external",
+      "grants": [
+        "catalog",
+        "mcp"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "catalog",
+      "grants": [
+        "catalog",
+        "mcp"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "mcp",
+      "grants": [
+        "catalog",
+        "mcp"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "external",
+      "grants": [
+        "catalog",
+        "mcp"
+      ],
+      "status": 403,
+      "upstreamRequests": 0
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "catalog",
+      "grants": [
+        "catalog",
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "mcp",
+      "grants": [
+        "catalog",
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "session",
+      "destination": "external",
+      "grants": [
+        "catalog",
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "catalog",
+      "grants": [
+        "catalog",
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "mcp",
+      "grants": [
+        "catalog",
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "permission matrix",
+      "passed": true,
+      "source": "pod",
+      "destination": "external",
+      "grants": [
+        "catalog",
+        "mcp",
+        "external"
+      ],
+      "status": 200,
+      "upstreamRequests": 1
+    },
+    {
+      "test": "wrong operations denied and forged headers cannot choose identity or keys",
+      "passed": true,
+      "source": "session"
+    },
+    {
+      "test": "wrong operations denied and forged headers cannot choose identity or keys",
+      "passed": true,
+      "source": "pod"
+    },
+    {
+      "test": "same gateway handles both verified identities and internal/external destinations",
+      "passed": true,
+      "gatewayPodUid": "a38c95e6-7028-4fc2-8b6c-39d6589b088f"
+    },
+    {
+      "test": "SDS dynamically issues external destination certificate",
+      "passed": true,
+      "hostname": "external-api.auth-demo.test"
+    },
+    {
+      "test": "warm native and Pod authorization makes zero Kubernetes object GETs or Vault reads",
+      "passed": true,
+      "counterDeltas": {
+        "podGETs": 0,
+        "accountGETs": 0,
+        "vaultReads": 0
+      }
+    },
+    {
+      "test": "managed listener rejects a trusted certificate without a Pod identity",
+      "passed": true
+    },
+    {
+      "test": "native listener rejects the managed Pod certificate issuer",
+      "passed": true
+    },
+    {
+      "test": "concurrent native Sessions and Pod preserve different ServiceAccount permissions and keys",
+      "passed": true,
+      "requests": 27,
+      "upstreamDeltas": {
+        "catalog": 3,
+        "mcp": 6,
+        "external": 6
+      }
+    },
+    {
+      "test": "real public Internet HTTPS through shared gateway",
+      "passed": true,
+      "source": "session",
+      "status": 200,
+      "origin": "https://example.com"
+    },
+    {
+      "test": "real public Internet HTTPS through shared gateway",
+      "passed": true,
+      "source": "pod",
+      "status": 200,
+      "origin": "https://example.com"
+    }
+  ]
+}

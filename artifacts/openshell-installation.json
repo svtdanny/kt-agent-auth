@@ -1,0 +1,27 @@
+{
+  "openshellVersion": "0.1.5",
+  "agentSandboxVersion": "v1.0.8",
+  "cliArchiveSHA256": "ca1ad6e6fbb4a6cd407e95763391b8ecff02912e7d9c467e7ca22696fe80af69",
+  "helmChartSHA256": "c163ea6a906934def4c18ea6ca47ef4f6d2d4e7f94ffea60a505144699d6592b",
+  "unchangedSupervisorBinarySHA256": "350ecd29f52e124a740a6e4f3ab9c17b6aaa19572292de5ebb7274b24fa44e09",
+  "host": {
+    "kernel": "7.0.0-38-generic",
+    "logicalCPUs": 48
+  },
+  "clusters": {
+    "auth-demo": {
+      "NanoCpus": 0,
+      "CpuPeriod": 0,
+      "CpuQuota": 0,
+      "CpusetCpus": "",
+      "Memory": 17179869184
+    },
+    "openshell-pilot": {
+      "NanoCpus": 0,
+      "CpuPeriod": 0,
+      "CpuQuota": 0,
+      "CpusetCpus": "",
+      "Memory": 17179869184
+    }
+  }
+}
