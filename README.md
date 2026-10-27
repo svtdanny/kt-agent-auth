@@ -6,6 +6,8 @@ The demo runs released kagent `1.0.0-alpha17` and Substrate `0.6.0-alpha3` with 
 
 Complete communication diagrams: [architecture and watch flow](docs/architecture.md). Editable Mermaid sources: [architecture](docs/architecture-current.mmd), [watches](docs/architecture-watch-cache.mmd).
 
+For a cluster pilot, use the [deployment handoff and remaining tasks](docs/pilot-deployment.md). The shared-proxy manifests and local installer are updated; a portable target-cluster release is still required before handing deployment execution to DevOps.
+
 An isolated [OpenShell pilot](pilots/openshell/README.md) compares native capabilities, Vault credential handling, matched performance, and actual memory/disk behavior across stop/start and kagent suspend/resume. Its scripts use a separate Minikube cluster and preserve this demo's main deployment.
 
 ```mermaid
@@ -60,6 +62,7 @@ Development checks:
 go test ./...
 go test -race ./internal/...
 go vet ./...
+python3 scripts/test_deploy_bundle.py
 npm ci --prefix agent
 node --test agent/server.test.mjs
 ```
@@ -229,7 +232,7 @@ The command Pod runs real Mastra, whose tool executes `curl --noproxy '*'` throu
 4. The shared Envoy terminates CONNECT, uses SDS to intercept HTTPS under the trusted Substrate CA, and sends HTTP headers plus the verified Pod SPIFFE identity to our ext_proc service.
 5. The bridge resolves the durable Pod UID binding, checks watched Pod and ServiceAccount UIDs, and evaluates the current permission set. The gateway forwards permitted requests with the rule-selected key from Vault.
 
-These rules affect only the explicitly installed Pod template. The local Minikube CNI does not enforce NetworkPolicy; this implementation enforces capture and its egress exceptions in the Pod itself. A gateway-only ingress allowance admits enrolled Pods to the managed listener on policy-enforcing CNIs; it does not change MCP ingress. No mock-service ingress restrictions, cluster-wide defaults, or changes to unrelated workloads are introduced. The test confirms that an unrelated Pod can still reach the mock directly. Both caller types converge on one shared gateway; unrelated workloads keep their existing paths.
+These rules affect only the explicitly installed Pod template. The local Minikube CNI does not enforce NetworkPolicy; this implementation enforces capture and its egress exceptions in the Pod itself. The gateway ingress policy preserves native traffic on container port 8443 and readiness/metrics on 15090, while admitting enrolled Pods to the managed listener on 9443; it does not change MCP ingress. Offline bundle checks cover these allowances; enforcement on a different CNI remains a pilot acceptance check. No mock-service ingress restrictions or cluster-wide default-deny policies are introduced. The test confirms that an unrelated Pod can still reach the mock directly. This demo replaces the platform egress gateway, so deploying it in a cluster with unrelated native kagent Sessions requires separate gateway assignment/isolation first; namespace separation alone does not preserve those Sessions' existing path. Both pilot caller types converge on one shared gateway.
 
 The trusted demo launcher observes the created Pod UID, issues the relay's client certificate with URI SAN `spiffe://auth-demo.local/ns/demo/pod/<uid>`, and calls `POST /internal/pods` using internal mTLS. That endpoint reads the actual Pod's ServiceAccount rather than trusting a requested account name. Relay keys are not mounted in the application container. Deletion, loss of enrollment label, Pod UID replacement, or ServiceAccount UID replacement denies the old identity once its watch event arrives. Bindings survive bridge restarts in PostgreSQL. Pod mapping rows currently remain for troubleshooting; native Session retention jobs do not purge them.
 

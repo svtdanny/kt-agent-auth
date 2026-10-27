@@ -2,6 +2,8 @@
 
 Implementation status: the MVP is deployed and tested locally using unchanged upstream binaries. The bridge uses kagent's existing PostgreSQL server with a private schema, event-driven ServiceAccount policy watches, Vault KV v2 credentials with explicit cache invalidation, and asynchronous Session cleanup. The extension uses a shared Envoy gateway for native kagent Sessions and enrolled command Pods, with native Actor authorization, on-demand SDS certificates, cross-namespace MCP and external HTTPS mocks, and additive permission sets on one ServiceAccount. See [README.md](README.md) for the current architecture, configuration, test evidence, and benchmark. The design discussion below predates source validation; the possible upstream patches mentioned there proved unnecessary for this demo.
 
+Pilot deployment status: the local scripts and generated manifests use the shared gateway, but a portable target-cluster release is not yet delivered. See the [DevOps handoff](docs/pilot-deployment.md) for remaining packaging tasks, infrastructure inputs, rollout/rollback and acceptance checks.
+
 The goal is to keep Substrate's existing transparent HTTPS interception and add your own Go service as a programmable request-processing layer.
 
 You won't modify agent code, install a sidecar into each sandbox, or implement an HTTPS proxy in Go.
