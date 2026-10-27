@@ -17,7 +17,7 @@ func TestExpiredWatchRelistsAndRecoversPolicy(t *testing.T) {
 	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
 		Name: "reader", Namespace: "demo", ResourceVersion: "1",
 		Labels:      map[string]string{api.ManagedLabel: "true"},
-		Annotations: map[string]string{api.PolicyTypeAnnotation: "catalog-access/v1"},
+		Annotations: map[string]string{api.PolicyRefAnnotation: "reader-policy"},
 	}}
 	k := fake.NewSimpleClientset(sa)
 	first := watch.NewRaceFreeFake()
@@ -40,7 +40,7 @@ func TestExpiredWatchRelistsAndRecoversPolicy(t *testing.T) {
 	// force resource-version expiry. Reflector recovery must LIST the new state.
 	changed := sa.DeepCopy()
 	changed.ResourceVersion = "2"
-	changed.Annotations[api.PolicyTypeAnnotation] = "deny-all/v1"
+	changed.Annotations[api.PolicyRefAnnotation] = "denied-policy"
 	if err := k.Tracker().Update(schema.GroupVersionResource{Version: "v1", Resource: "serviceaccounts"}, changed, "demo"); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestExpiredWatchRelistsAndRecoversPolicy(t *testing.T) {
 	first.Stop()
 	eventually(t, func() bool {
 		got, err := w.Account(ctx, "demo", "reader")
-		return err == nil && got.ResourceVersion == "2" && got.Annotations[api.PolicyTypeAnnotation] == "deny-all/v1"
+		return err == nil && got.ResourceVersion == "2" && got.Annotations[api.PolicyRefAnnotation] == "denied-policy"
 	})
 	if w.Stats()["listCalls"] < 2 || w.Stats()["accountGETs"] != 0 {
 		t.Fatalf("watch recovery did not use a relist: %v", w.Stats())

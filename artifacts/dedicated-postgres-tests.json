@@ -1,0 +1,7 @@
+{
+  "database": "isolated auth_bridge_test on existing PostgreSQL server",
+  "tls": "verify-full",
+  "raceDetector": true,
+  "podPhase": "Succeeded",
+  "log": "=== RUN   TestPostgresConcurrentIdempotencyAndImmutableBinding\n--- PASS: TestPostgresConcurrentIdempotencyAndImmutableBinding (0.17s)\n=== RUN   TestPostgresRetentionKeepsRequestTombstone\n--- PASS: TestPostgresRetentionKeepsRequestTombstone (0.08s)\nPASS\n"
+}

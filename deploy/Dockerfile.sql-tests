@@ -1,5 +1,4 @@
 FROM node:22.22.1-bookworm-slim
 COPY .cache/build/store-tests /app/store-tests
-COPY .cache/build/legacy-tests /app/legacy-tests
 USER 65532:65532
-CMD ["sh", "-c", "/app/store-tests -test.v && /app/legacy-tests -test.v"]
+ENTRYPOINT ["/app/store-tests", "-test.v"]

@@ -1,0 +1,55 @@
+// Copyright 2026 The agent-auth Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// Package agentegress adds operator-owned namespace gateway assignments.
+package agentegress
+
+import (
+	"encoding/json"
+	"fmt"
+	"go.ate.dev/substrate/internal/resources"
+	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	"os"
+	"sort"
+)
+
+var gateways = map[string]string{}
+
+func Load(path string) error {
+	if path == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read agent gateway assignments: %w", err)
+	}
+	values := map[string]string{}
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return err
+	}
+	for ns, address := range values {
+		if len(validation.IsDNS1123Label(ns)) > 0 || address == "" {
+			return fmt.Errorf("invalid agent gateway assignment")
+		}
+		if errs := resources.ValidateHostPort(field.NewPath("agentGateway", ns), address); len(errs) > 0 {
+			return errs.ToAggregate()
+		}
+	}
+	gateways = values
+	return nil
+}
+func Address(namespace, fallback string) string {
+	if address, ok := gateways[namespace]; ok {
+		return address
+	}
+	return fallback
+}
+func Principals() []string {
+	out := []string{}
+	for ns := range gateways {
+		out = append(out, "spiffe://cluster.local/ns/"+ns+"/sa/agent-egress")
+	}
+	sort.Strings(out)
+	return out
+}

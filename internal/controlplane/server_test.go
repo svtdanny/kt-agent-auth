@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -86,7 +85,7 @@ func eventually(t *testing.T, check func() bool) {
 func fixture(t *testing.T) (*Server, *fake.Clientset, *sessions) {
 	t.Helper()
 	config := `{"agent":{"namespace":"demo","name":"mastra-http"},"origin":"https://catalog.demo","access":"read","credential":"reader-token"}`
-	k := fake.NewSimpleClientset(&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "reader", Namespace: "demo", UID: types.UID("uid"), ResourceVersion: "1", Labels: map[string]string{api.ManagedLabel: "true"}, Annotations: map[string]string{api.PolicyTypeAnnotation: "catalog-access/v1", api.PolicyConfigAnnotation: config}}})
+	k := fake.NewSimpleClientset(&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "reader", Namespace: "demo", UID: types.UID("uid"), ResourceVersion: "1", Labels: map[string]string{api.ManagedLabel: "true"}, Annotations: map[string]string{api.PolicyRefAnnotation: "reader-policy"}}}, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "reader-policy", Namespace: "demo", UID: "policy-uid", ResourceVersion: "1", Labels: map[string]string{api.ManagedLabel: "true"}}, Data: map[string]string{"type": "catalog-access/v1", "config": config}})
 	k.PrependReactor("create", "tokenreviews", func(ktesting.Action) (bool, runtime.Object, error) {
 		return true, &authnv1.TokenReview{Status: authnv1.TokenReviewStatus{Authenticated: true, User: authnv1.UserInfo{Username: "alice"}}}, nil
 	})
@@ -105,7 +104,7 @@ func fixture(t *testing.T) (*Server, *fake.Clientset, *sessions) {
 		t.Fatal(err)
 	}
 	up := &sessions{}
-	return &Server{Kube: k, Store: newMemoryStore(), Kagent: up, Namespace: "demo", TokenPath: token, Objects: objects, Credentials: &testCredentials{value: "test-secret"}, GCInterval: 5 * time.Minute, BindingRetention: 24 * time.Hour, RequestRetention: 7 * 24 * time.Hour}, k, up
+	return &Server{Kube: k, Store: newMemoryStore(), Kagent: up, Namespace: "demo", AgentName: "mastra-http", TokenPath: token, Objects: objects, Credentials: &testCredentials{value: "test-secret"}, GCInterval: 5 * time.Minute, BindingRetention: 24 * time.Hour, RequestRetention: 7 * 24 * time.Hour}, k, up
 }
 func call(t *testing.T, s *Server, path string, input any, client bool) *httptest.ResponseRecorder {
 	t.Helper()
@@ -126,10 +125,6 @@ func launch(t *testing.T, s *Server) {
 		t.Fatal(w.Body)
 	}
 }
-func grant() api.CredentialRequest {
-	return api.CredentialRequest{SpiffeID: spiffe, PolicyVersion: "1", Name: "reader-token", Request: api.Request{Scheme: "https", Host: "catalog.demo", Port: 443, Method: "GET", Path: "/catalog"}}
-}
-
 func TestBridgeLaunchBindingAndPermission(t *testing.T) {
 	s, _, up := fixture(t)
 	launch(t, s)
@@ -146,86 +141,6 @@ func TestBridgeLaunchBindingAndPermission(t *testing.T) {
 		t.Fatalf("%+v %v", b, err)
 	}
 }
-func TestWatchPolicyChangeUIDReplacementAndLabelRemoval(t *testing.T) {
-	s, k, _ := fixture(t)
-	launch(t, s)
-	ctx := context.Background()
-	sa, _ := k.CoreV1().ServiceAccounts("demo").Get(ctx, "reader", metav1.GetOptions{})
-	sa.Annotations[api.PolicyTypeAnnotation] = "deny-all/v1"
-	sa.ResourceVersion = "2"
-	_, _ = k.CoreV1().ServiceAccounts("demo").Update(ctx, sa, metav1.UpdateOptions{})
-	eventually(t, func() bool { sc, err := s.resolve(ctx, spiffe); return err == nil && sc.Policy.Type == "deny-all/v1" })
-	if w := call(t, s, "/internal/credential", grant(), true); w.Code == 200 {
-		t.Fatal("revoked policy released credential")
-	}
-	sa.UID = "replacement"
-	sa.ResourceVersion = "3"
-	_, _ = k.CoreV1().ServiceAccounts("demo").Update(ctx, sa, metav1.UpdateOptions{})
-	eventually(t, func() bool {
-		o, err := s.Objects.Account(ctx, "demo", "reader")
-		return err == nil && o.UID == "replacement"
-	})
-	if _, err := s.resolve(ctx, spiffe); err == nil {
-		t.Fatal("UID replacement inherited binding")
-	}
-	delete(sa.Labels, api.ManagedLabel)
-	sa.ResourceVersion = "4"
-	_, _ = k.CoreV1().ServiceAccounts("demo").Update(ctx, sa, metav1.UpdateOptions{})
-	eventually(t, func() bool { _, err := s.Objects.Account(ctx, "demo", "reader"); return err != nil })
-}
-func TestCredentialRequiresCertificateAndExactGrant(t *testing.T) {
-	s, _, _ := fixture(t)
-	launch(t, s)
-	r := grant()
-	if w := call(t, s, "/internal/credential", r, false); w.Code != 403 {
-		t.Fatal("certificate missing")
-	}
-	if w := call(t, s, "/internal/credential", r, true); w.Code != 200 {
-		t.Fatal(w.Body)
-	}
-	r.Name = "another-secret"
-	if w := call(t, s, "/internal/credential", r, true); w.Code != 403 {
-		t.Fatal("arbitrary Secret released")
-	}
-	r = grant()
-	r.Request.Host = "attacker.demo"
-	if w := call(t, s, "/internal/credential", r, true); w.Code != 403 {
-		t.Fatal("credential released for another destination")
-	}
-}
-func TestNoPerRequestKubernetesOrSessionReads(t *testing.T) {
-	s, k, up := fixture(t)
-	launch(t, s)
-	k.ClearActions()
-	// Wait beyond the removed TTL, then prove that warm requests still make no GETs.
-	time.Sleep(2100 * time.Millisecond)
-	for range 20 {
-		if w := call(t, s, "/internal/credential", grant(), true); w.Code != 200 {
-			t.Fatal(w.Body)
-		}
-	}
-	for _, a := range k.Actions() {
-		if a.GetVerb() == "get" || a.GetVerb() == "list" {
-			t.Fatalf("warm request contacted Kubernetes: %s %s", a.GetVerb(), a.GetResource().Resource)
-		}
-	}
-	if up.gets != 0 {
-		t.Fatal("egress performed a native GetSession")
-	}
-	k.PrependReactor("get", "*", func(ktesting.Action) (bool, runtime.Object, error) { return true, nil, errors.New("API unavailable") })
-	if w := call(t, s, "/internal/credential", grant(), true); w.Code != 200 {
-		t.Fatal("known snapshot was expired during disconnection")
-	}
-	if _, err := s.Objects.Account(context.Background(), "demo", "unknown"); err == nil {
-		t.Fatal("unresolved cache miss permitted")
-	}
-}
-
-type testCredentials struct{ value string }
-
-func (c *testCredentials) Read(context.Context, string, string) (string, error) { return c.value, nil }
-func (c *testCredentials) Invalidate(string, string) error                      { return nil }
-func (c *testCredentials) Stats() map[string]uint64                             { return map[string]uint64{} }
 func TestDeleteRevokesImmediatelyAndAllowsRetry(t *testing.T) {
 	s, _, up := fixture(t)
 	launch(t, s)
@@ -287,3 +202,9 @@ func TestSessionCleanupRequiresCompleteScanAndKeepsSuspendedSessions(t *testing.
 		})
 	}
 }
+
+type testCredentials struct{ value string }
+
+func (t *testCredentials) Read(context.Context, string, string) (string, error) { return t.value, nil }
+func (t *testCredentials) Invalidate(string, string) error                      { return nil }
+func (t *testCredentials) Stats() map[string]uint64                             { return map[string]uint64{} }

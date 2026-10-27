@@ -7,8 +7,7 @@ import (
 	"strings"
 )
 
-const PolicyTypeAnnotation = "auth.demo.dev/policy-type"
-const PolicyConfigAnnotation = "auth.demo.dev/policy-config"
+const PolicyRefAnnotation = "auth.demo.dev/policy-ref"
 const ManagedLabel = "auth.demo.dev/managed"
 
 type ControlError struct {
@@ -34,8 +33,6 @@ type CreateSession struct {
 }
 
 type Binding struct {
-	PodName    string `json:"podName,omitempty"`
-	PodUID     string `json:"podUid,omitempty"`
 	SessionID  string `json:"sessionId"`
 	Atespace   string `json:"atespace"`
 	User       string `json:"user"`
@@ -74,11 +71,9 @@ type Decision struct {
 	Credential  string            `json:"credential,omitempty"`
 }
 
-type CredentialRequest struct {
-	SpiffeID      string  `json:"spiffeId"`
-	PolicyVersion string  `json:"policyVersion"`
-	Name          string  `json:"name"`
-	Request       Request `json:"request"`
+type Authorization struct {
+	Context  SessionContext
+	Decision Decision
 }
 
 type InvokeRequest struct {
@@ -88,25 +83,6 @@ type InvokeRequest struct {
 	Path      string            `json:"path"`
 	Headers   map[string]string `json:"headers,omitempty"`
 	Load      *LoadSpec         `json:"load,omitempty"`
-}
-
-// ParsePod accepts the URI SAN issued by our managed-Pod launcher. HTTP headers
-// never select this identity; the authenticated gateway supplies the TLS SAN.
-func ParsePod(raw string) (string, string, error) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "spiffe" || u.Host != "auth-demo.local" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.RawPath != "" {
-		return "", "", fmt.Errorf("invalid Pod identity")
-	}
-	p := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
-	if len(p) != 4 || p[0] != "ns" || !validName(p[1]) || p[2] != "pod" {
-		return "", "", fmt.Errorf("invalid Pod identity")
-	}
-	// Reuse the strict canonical UUID validation used for native Session IDs.
-	_, _, err = ParseActor("spiffe://substrate-actor.local/worker-for-actor/" + p[1] + "/session-" + p[3])
-	if err != nil {
-		return "", "", err
-	}
-	return p[1], p[3], nil
 }
 
 // LoadSpec bounds the demo's explicit benchmark tool mode.

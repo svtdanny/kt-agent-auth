@@ -21,7 +21,7 @@ os.environ['KUBECONFIG']=str(CACHE/'kubeconfig')
 def run(*args,**kwargs):return subprocess.run(args,check=True,**kwargs)
 
 def main():
-    for name in ('docker','minikube','helm','kubectl','go','npm','openssl'):
+    for name in ('docker','minikube','kubectl','go','npm','openssl'):
         if not shutil.which(name):raise SystemExit('Required executable missing: '+name)
     real_helm=str(CACHE/'bin/helm3')
     if not Path(real_helm).exists():
@@ -41,15 +41,9 @@ def main():
     # A registry is needed only for Substrate's sandbox image cache.
     existing=subprocess.run(['docker','inspect','kind-registry'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if existing.returncode:run('docker','run','-d','--name','kind-registry','-p','127.0.0.1:5001:5000','registry:3')
-    from deploy import certificates,tls_secret,apply,obj
-    apply([obj('Namespace','demo'),{'apiVersion':'v1','kind':'Namespace','metadata':{'name':'ate-system'}}])
-    directory=certificates()
-    apply([tls_secret('auth-gateway-client','agentgateway',directory,'ate-system')])
+    # Use released upstream charts directly; no shared-gateway post-renderer.
     (CACHE/'bin/helm').unlink(missing_ok=True)
-    (CACHE/'bin/helm').symlink_to(ROOT/'scripts/helm-wrapper.py')
-    (ROOT/'scripts/helm-wrapper.py').chmod(0o755)
-    (ROOT/'scripts/helm-post-renderer.py').chmod(0o755)
-    os.environ['AUTH_DEMO_REAL_HELM']=real_helm
+    (CACHE/'bin/helm').symlink_to(Path(real_helm))
     binary=CACHE/'bin/kagent'
     url=f'https://github.com/kagent-dev/kagent/releases/download/v{VERSION}/kagent-linux-amd64'
     if not binary.exists():run('curl','-fLsS','--retry','3',url,'-o',str(binary));binary.chmod(0o755)
@@ -68,8 +62,7 @@ def main():
             if attempt==2:raise
             print('Retrying the idempotent upstream install after its timeout; image pulls may still be completing.',flush=True)
     run('python3','scripts/build.py')
-    run('minikube','-p','auth-demo','image','load','--daemon',*[f'localhost:5001/auth-demo/{name}:demo' for name in ('control-plane','ext-proc','test-api','import-bbolt')])
     run('python3','scripts/deploy.py')
-    run('python3','scripts/permissions_demo.py')
+
 
 if __name__=='__main__':main()

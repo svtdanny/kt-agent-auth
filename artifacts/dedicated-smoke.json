@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-10-27T12:34:55.292669+00:00",
+  "cluster": "auth-demo",
+  "tests": [
+    {
+      "namespace": "auth-agent-a",
+      "origin": "http://internal-mcp.test-services.svc.cluster.local:8080",
+      "passed": true
+    },
+    {
+      "namespace": "auth-agent-a",
+      "origin": "https://dedicated-api.auth-demo.test:8443",
+      "passed": true
+    },
+    {
+      "namespace": "auth-agent-a",
+      "deniedPath": "/private",
+      "passed": true
+    },
+    {
+      "namespace": "auth-agent-b",
+      "origin": "http://internal-mcp.test-services.svc.cluster.local:8080",
+      "passed": true
+    },
+    {
+      "namespace": "auth-agent-b",
+      "origin": "https://dedicated-api.auth-demo.test:8443",
+      "passed": true
+    },
+    {
+      "namespace": "auth-agent-b",
+      "deniedPath": "/private",
+      "passed": true
+    }
+  ]
+}

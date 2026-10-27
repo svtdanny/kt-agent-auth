@@ -1,0 +1,24 @@
+# Include in a project pipeline with a protected Kubernetes deployment environment.
+# Configure the Vault JWT role and KV path for that project; values below are examples.
+deploy-agent-credentials:
+  stage: deploy
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.example.com
+  secrets:
+    AGENT_CREDENTIALS_JSON:
+      vault: projects/agent-a/credentials_json@kv
+      token: $VAULT_ID_TOKEN
+      file: true
+  script:
+    - >-
+      kubectl --context "$KUBE_CONTEXT" --namespace "$AGENT_NAMESPACE"
+      create secret generic application-credentials
+      --from-file=credentials.json="$AGENT_CREDENTIALS_JSON"
+      --dry-run=client -o json |
+      kubectl --context "$KUBE_CONTEXT" --namespace "$AGENT_NAMESPACE" apply -f -
+    # Apply the project policy ConfigMap, ServiceAccount policy reference, and
+    # dedicated bundle with your deployment tooling. Platform-owned resources
+    # (routing assignments, trust/signers, reviewer binding) are provisioned separately.
+  environment:
+    name: $AGENT_NAMESPACE

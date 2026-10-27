@@ -1,284 +1,174 @@
 #!/usr/bin/env python3
-"""Exercise real Mastra sessions through the local Minikube egress gateway."""
-import http.client
-import json
-import os
-from pathlib import Path
-import ssl
-import secrets
-import subprocess
-import time
-import uuid
-from urllib.parse import urlencode
-from vault_demo import Admin
-
-ROOT=Path(__file__).resolve().parents[1]
-CACHE=ROOT/'.cache'
-ENV={**os.environ,'KUBECONFIG':str(CACHE/'kubeconfig')}
+"""Real kagent Sessions through two dedicated egress deployments."""
+import base64,datetime,http.client,json,ssl,subprocess,time,uuid
+from local import ROOT,CACHE,ENV,kubectl,apply
+from deploy import SCOPES,AGENT,INTERNAL,EXTERNAL,policy
 RESULTS=[]
-CONNECTIONS={}
-
-def kubectl(*args):
-    return subprocess.check_output(['kubectl','--context','auth-demo',*args],env=ENV,text=True)
-
-def record(name, **evidence):
-    RESULTS.append({'test':name,'passed':True,**evidence})
-    print('PASS:',name,flush=True)
-
-def request(port,path,body=None,token=None,method=None,internal_client=False):
-    headers={'Content-Type':'application/json'}
-    if token: headers['Authorization']='Bearer '+token
-    data=None if body is None else json.dumps(body).encode()
-    key=(port,internal_client)
-    if key not in CONNECTIONS:
-        context=ssl.create_default_context(cafile=str(CACHE/'tls/ca.crt'))
-        if internal_client:context.load_cert_chain(str(CACHE/'tls/ext-proc.crt'),str(CACHE/'tls/ext-proc.key'))
-        CONNECTIONS[key]=http.client.HTTPSConnection('localhost',port,timeout=180,context=context)
-    connection=CONNECTIONS[key]
-    try:
-        connection.request(method or ('POST' if body is not None else 'GET'),path,body=data,headers=headers)
-        response=connection.getresponse()
-        return response.status,json.loads(response.read())
-    except Exception:
-        CONNECTIONS.pop(key).close()
-        raise
-
-def close_connections():
-    for connection in CONNECTIONS.values():connection.close()
-    CONNECTIONS.clear()
-
-def calls(value):
+def record(name,**evidence):
+    RESULTS.append({'test':name,'passed':True,**evidence});print('PASS:',name,flush=True)
+    (CACHE/'dedicated-test-progress.json').write_text(json.dumps(RESULTS,indent=2)+'\n')
+def payload(value,key):
     if isinstance(value,dict):
-        if 'calls' in value:return value['calls']
-        for key,child in value.items():
-            if key=='text' and isinstance(child,str):
+        if key in value:return value[key]
+        for name,child in value.items():
+            if name=='text' and isinstance(child,str):
                 try:
-                    result=calls(json.loads(child))
+                    result=payload(json.loads(child),key)
                     if result is not None:return result
                 except json.JSONDecodeError:pass
-            result=calls(child)
+            result=payload(child,key)
             if result is not None:return result
-    if isinstance(value,list):
+    elif isinstance(value,list):
         for child in value:
-            result=calls(child)
+            result=payload(child,key)
             if result is not None:return result
     return None
-
-def invoke(token,sid,method,path,headers=None):
-    status,result=request(18443,f'/v1/sessions/{sid}/invoke',{'method':method,'path':path,'headers':headers or {}},token)
-    assert status==200,(status,result)
-    result_calls=calls(result)
-    assert result_calls and len(result_calls)==1,('Mastra did not execute exactly one HTTP tool call',result)
-    return result_calls[0]
-
-def audit():
-    status,result=request(18444,'/audit');assert status==200;return result or []
-
-def wait_until(check):
-    for _ in range(100):
-        if check():return
-        time.sleep(.1)
-    raise AssertionError('asynchronous state did not converge')
-
-def context_for(sid):
-    query=urlencode({'spiffeId':'spiffe://substrate-actor.local/worker-for-actor/demo/session-'+sid})
-    return request(18443,'/internal/context?'+query,internal_client=True)
-
-def policy_type(sid):
-    status,value=context_for(sid)
-    return value.get('policy',{}).get('type') if status==200 else None
-
-def credential_is(sid,wanted):
-    status,context=context_for(sid)
-    if status!=200:return False
-    grant={'spiffeId':'spiffe://substrate-actor.local/worker-for-actor/demo/session-'+sid,
-           'policyVersion':context['policy']['version'],'name':'read-token',
-           'request':{'scheme':'https','host':'catalog-api.demo.svc.cluster.local','port':443,'method':'GET','path':'/catalog','headers':{}}}
-    status,response=request(18443,'/internal/credential',grant,internal_client=True)
-    return status==200 and response.get('authorization')=='Bearer '+wanted
-
-def invalidate_credential(name):
-    status,_=request(18443,'/internal/credentials/invalidate',{'namespace':'demo','name':name},internal_client=True)
-    assert status==200,'Vault credential invalidation failed'
-
-def delete_native(sid):
-    name='auth-test-native-delete'
-    kubectl('-n','demo','delete','pod',name,'--ignore-not-found=true','--wait=true')
-    pod={'apiVersion':'v1','kind':'Pod','metadata':{'name':name,'namespace':'demo'},'spec':{
-        'serviceAccountName':'auth-control-plane','restartPolicy':'Never','activeDeadlineSeconds':90,
-        'containers':[{'name':'delete','image':'localhost:5001/auth-demo/benchmark:demo','imagePullPolicy':'Never',
-                       'args':['-delete-native-session',sid]}]}}
-    subprocess.run(['kubectl','--context','auth-demo','apply','-f','-'],env=ENV,input=json.dumps(pod),text=True,check=True,stdout=subprocess.DEVNULL)
+class Forward:
+    def __init__(self,ns,service,port,target=8443):
+        self.port=port;self.log=open(CACHE/(ns+'-'+service+'-forward.log'),'w')
+        self.process=subprocess.Popen(['kubectl','--context','auth-demo','-n',ns,'port-forward','svc/'+service,f'{port}:{target}'],env=ENV,stdout=self.log,stderr=self.log)
+    def close(self):self.process.terminate();self.process.wait(timeout=10);self.log.close()
+def request(port,path,body=None,token=None,admin=False,method=None,client_scope=None):
+    d=CACHE/'dedicated-tls'/SCOPES[port-18543];ctx=ssl.create_default_context(cafile=str(d/'ca.crt'))
+    if admin:
+        client=CACHE/'dedicated-tls'/(client_scope or SCOPES[port-18543])
+        ctx.load_cert_chain(str(client/'ext-proc.crt'),str(client/'ext-proc.key'))
+    conn=http.client.HTTPSConnection('localhost',port,context=ctx,timeout=180)
+    headers={'Content-Type':'application/json'}
+    if token:headers['Authorization']='Bearer '+token
     try:
-        for _ in range(90):
-            state=json.loads(kubectl('-n','demo','get','pod',name,'-o','json'))['status']['phase']
-            if state in ('Succeeded','Failed'):break
-            time.sleep(1)
-        assert state=='Succeeded',kubectl('-n','demo','logs',name)
-    finally:kubectl('-n','demo','delete','pod',name,'--wait=true','--ignore-not-found=true')
-
-def scale(name,count):
-    kubectl('-n','demo','scale','deployment/'+name,'--replicas='+str(count))
-    if count:kubectl('-n','demo','rollout','status','deployment/'+name,'--timeout=120s')
-    else:
-        for _ in range(30):
-            pod=json.loads(kubectl('-n','demo','get','pods','-l','app='+name,'-o','json'))['items']
-            if not pod:return
-            time.sleep(1)
-        raise AssertionError('deployment did not stop: '+name)
-
-def delete_session(token,sid):
-    for _ in range(30):
-        status,result=request(18443,f'/v1/sessions/{sid}',token=token,method='DELETE')
-        if status==200:return
-        if status!=409:raise AssertionError(('session cleanup failed',status,result))
-        time.sleep(1)
-    raise AssertionError(('session remained busy during cleanup',sid,result))
-
+        conn.request(method or ('POST' if body is not None else 'GET'),path,body=None if body is None else json.dumps(body),headers=headers)
+        resp=conn.getresponse();data=resp.read();return resp.status,json.loads(data)
+    finally:conn.close()
+def wait_for(check,seconds=100):
+    deadline=time.monotonic()+seconds;last=None
+    while time.monotonic()<deadline:
+        try:
+            if check():return
+        except Exception as error:last=error
+        time.sleep(.5)
+    raise AssertionError('condition did not converge: '+str(last))
+def invoke(port,token,sid,method='GET',path='/catalog',origin=INTERNAL,headers=None,load=None,execution=None):
+    body={'method':method,'path':path,'origin':origin,'headers':headers or {}}
+    if load:body['load']=load
+    if execution:body['execution']=execution
+    # kagent may reject input while a new sandbox starts. Retry only its
+    # explicit 'not accepted' response, never an operation that may have run.
+    for attempt in range(60):
+        status,value=request(port,f'/v1/sessions/{sid}/invoke',body,token)
+        if status==502 and 'input was not accepted' in str(value):time.sleep(1);continue
+        break
+    assert status==200,(status,value)
+    result=payload(value,'load' if load else 'calls')
+    assert result is not None,('missing Mastra tool result',value)
+    return result if load else result[0]
+def set_policy(ns,config=None,typ='permission-set/v1'):
+    kubectl('-n',ns,'patch','cm','agent-permissions','--type=merge','-p',json.dumps({'data':{'type':typ,'config':json.dumps(config if config is not None else policy(ns,ns==SCOPES[1]))}}))
+def set_secret(ns,token):
+    kubectl('-n',ns,'patch','secret','application-credentials','--type=merge','-p',json.dumps({'data':{'credentials.json':base64.b64encode(json.dumps({'api-token':{'type':'bearer','token':token}}).encode()).decode()}}))
 def main():
-    assert kubectl('config','current-context').strip()=='auth-demo'
-    from benchmark import build_runner
-    build_runner()
-    handles=[]
-    sessions=[]
-    token=None
+    forwards=[];sessions=[];tokens=[];run_id=uuid.uuid4().hex
     try:
-        for service,ports in [('auth-control-plane','18443:8443'),('catalog-api','18444:443')]:
-            log=open(CACHE/('portforward-'+service+'.log'),'w')
-            handles.append(subprocess.Popen(['kubectl','--context','auth-demo','-n','demo','port-forward','service/'+service,ports],env=ENV,stdout=log,stderr=log))
-        last_error=None
-        for _ in range(60):
-            if any(p.poll() is not None for p in handles):raise AssertionError('port-forward stopped')
-            try:
-                if request(18443,'/readyz')[0]==200 and request(18444,'/audit')[0]==200:break
-            except Exception as error:last_error=error
-            time.sleep(1)
-        else:raise AssertionError(f'services did not become reachable: {last_error}')
-        token=kubectl('-n','demo','create','token','test-user','--audience=auth-demo','--duration=1h').strip()
-        unprivileged=kubectl('-n','demo','create','token','unprivileged-user','--audience=auth-demo','--duration=1h').strip()
-        run_id=uuid.uuid4().hex
-        def create(account,key,caller=token):
-            return request(18443,'/v1/sessions',{'agent':{'namespace':'demo','name':'mastra-http'},'serviceAccount':account,'requestId':key},caller)
-        status,result=create('catalog-reader',run_id+'-unauthorized',unprivileged)
-        assert status==403,(status,result);record('unauthorized service-account selection rejected')
-        status,result=create('catalog-reader',run_id+'-invalid','not-a-valid-token')
-        assert status==401,(status,result);record('invalid caller credential rejected')
-        status,reader=create('catalog-reader',run_id+'-reader');assert status==200,(status,reader)
-        sessions.append(reader['sessionId'])
-        status,writer=create('catalog-writer',run_id+'-writer');assert status==200,(status,writer)
-        sessions.append(writer['sessionId'])
-        assert reader['sessionId']!=writer['sessionId']
-        record('two native kagent sessions bound to different service accounts',reader=reader['sessionId'],writer=writer['sessionId'])
-        status,retry=create('catalog-reader',run_id+'-reader');assert status==200 and retry==reader
-        status,_=create('catalog-writer',run_id+'-reader');assert status==409
-        record('creation retries preserve an immutable service-account binding')
-        status,_=request(18443,f'/v1/sessions/{reader["sessionId"]}/invoke',{'method':'GET','path':'/catalog'},unprivileged)
-        assert status==403;record('session invocation requires its authenticated owner')
-        result=invoke(token,reader['sessionId'],'GET','/catalog');assert result['status']==200,result
-        upstream=json.loads(result['body']);assert upstream['credential']=='reader' and upstream['credentialAccepted']
-        record('Mastra GET reaches HTTPS API with gateway-injected reader credential')
-        before=len(audit());result=invoke(token,reader['sessionId'],'POST','/orders');assert result['status']==403,result
-        assert len(audit())==before;record('reader POST denied before upstream receives it')
-        result=invoke(token,writer['sessionId'],'POST','/orders');assert result['status']==200,result
-        assert json.loads(result['body'])['credential']=='writer';record('same Agent can write under writer service account')
-        logs=kubectl('-n','demo','logs','deployment/auth-ext-proc')
-        assert reader['sessionId'] in logs and writer['sessionId'] in logs
-        record('gateway audit distinguishes both verified session identities')
-        before=len(audit());result=invoke(token,reader['sessionId'],'POST','/orders',{'X-Service-Account':'catalog-writer','X-Agent-ID':writer['sessionId']})
-        assert result['status']==403 and len(audit())==before;record('forged HTTP identity headers cannot change permissions')
-        for path in ('/private','/%63atalog','/catalog/../orders'):
-            before=len(audit());result=invoke(token,reader['sessionId'],'GET',path);assert result['status']==403 and len(audit())==before,(path,result)
-        record('ungranted and encoded paths denied')
-        # Watch-based policy and Secret changes are intentionally eventual.
-        kubectl('-n','demo','annotate','serviceaccount','catalog-reader','auth.demo.dev/policy-type=deny-all/v1','--overwrite')
+        for i,ns in enumerate(SCOPES):
+            f=Forward(ns,'authorizer',18543+i);forwards.append(f)
+            wait_for(lambda:request(f.port,'/readyz')[0]==200)
+            token=kubectl('-n',ns,'create','token','test-user','--audience=auth-demo','--duration=1h').strip();tokens.append(token)
+            body={'agent':{'namespace':ns,'name':AGENT},'serviceAccount':'agent-caller','requestId':run_id}
+            status,binding=request(f.port,'/v1/sessions',body,token);assert status==200,(status,binding)
+            sessions.append(binding['sessionId'])
+            status,retry=request(f.port,'/v1/sessions',body,token);assert status==200 and retry==binding,(status,retry)
+        a,b=[x.port for x in forwards];ta,tb=tokens;sa,sb=sessions
+        record('two native Sessions created in separate agent scopes; retries preserve bindings')
+        for port,token,sid,identity in [(a,ta,sa,'reader'),(b,tb,sb,'writer')]:
+            for origin,path in [(INTERNAL,'/catalog'),(EXTERNAL,'/external')]:
+                result=invoke(port,token,sid,path=path,origin=origin);assert result['status']==200,result
+                event=json.loads(result['body']);assert event['credential']==identity and event['credentialAccepted'] and event['authorizationHeaderCount']==1,event
+        record('internal HTTP and external HTTPS inject each agent own mounted key')
+        assert invoke(a,ta,sa,method='POST',path='/mcp')['status']==403
+        result=invoke(b,tb,sb,method='POST',path='/mcp');assert result['status']==200 and json.loads(result['body'])['credential']=='writer',result
+        assert invoke(a,ta,sa,path='/private')['status']==403
+        assert invoke(a,ta,sa,method='POST',path='/mcp',headers={'X-Agent-ID':sb,'X-Service-Account':'writer','Authorization':'Bearer forged'})['status']==403
+        record('operation grants and spoofed identity headers enforced')
+        status,_=request(b,f'/v1/sessions/{sa}/invoke',{'method':'GET','path':'/catalog'},ta);assert status==403,status
+        record('other agent authorizer rejects Session from wrong scope')
         try:
-            wait_until(lambda:policy_type(reader['sessionId'])=='deny-all/v1')
-            result=invoke(token,reader['sessionId'],'GET','/catalog');assert result['status']==403,result
-            record('ServiceAccount watch propagates policy revocation')
+            request(a,'/internal/stats',admin=True,client_scope=SCOPES[1])
+        except (ssl.SSLError,ConnectionError):pass
+        else:raise AssertionError('Other bundle client certificate accepted')
+        record('per-bundle mTLS prevents cross-authorizer internal access')
+        # A deliberate TLS reset can terminate kubectl's port-forward stream.
+        # Reopen the test transport; the gateway Pod itself remains healthy.
+        forwards[0].close();forwards[0]=Forward(SCOPES[0],'authorizer',a)
+        wait_for(lambda:request(a,'/readyz')[0]==200,seconds=15)
+        for ns in SCOPES:
+            pod=json.loads(kubectl('-n',ns,'get','deploy','agent-egress','-o','json'))['spec']['template']['spec']
+            holders=[c['name'] for c in pod['containers']+pod.get('initContainers',[]) if any(m['name']=='application-credentials' for m in c.get('volumeMounts',[]))]
+            assert holders==['authorizer'],holders
+        record('application credentials mounted only in dedicated authorizer')
+        set_policy(SCOPES[0],typ='deny-all/v1')
+        try:
+            wait_for(lambda:invoke(a,ta,sa)['status']==403)
+            assert invoke(b,tb,sb)['status']==200
+            record('ConfigMap watch revokes one agent while other remains authorized')
         finally:
-            kubectl('-n','demo','annotate','serviceaccount','catalog-reader','auth.demo.dev/policy-type=catalog-access/v1','--overwrite')
-            wait_until(lambda:policy_type(reader['sessionId'])=='catalog-access/v1')
-        kubectl('-n','demo','label','serviceaccount','catalog-reader','auth.demo.dev/managed-')
+            set_policy(SCOPES[0]);wait_for(lambda:invoke(a,ta,sa)['status']==200)
+        reduced=policy(SCOPES[0]);reduced['permissions']=[reduced['permissions'][0]]
+        set_policy(SCOPES[0],reduced)
         try:
-            wait_until(lambda:context_for(reader['sessionId'])[0]==403)
-            status,_=create('catalog-reader',run_id+'-unmanaged');assert status==403
-            result=invoke(token,reader['sessionId'],'GET','/catalog');assert result['status']==403
-            record('removing managed label revokes egress and prevents new bindings')
+            wait_for(lambda:invoke(a,ta,sa,origin=EXTERNAL,path='/external')['status']==403)
+            assert invoke(a,ta,sa)['status']==200
+            record('one Session holds multiple grants; removing external grant preserves internal access')
         finally:
-            kubectl('-n','demo','label','serviceaccount','catalog-reader','auth.demo.dev/managed=true','--overwrite')
-            wait_until(lambda:context_for(reader['sessionId'])[0]==200)
-        with Admin() as vault:
-            original_text=vault.read('read-token')
-            rotated=secrets.token_urlsafe(24)
-            try:
-                vault.write('read-token',rotated)
-                assert credential_is(reader['sessionId'],original_text),'cached Vault value refreshed without invalidation'
-                invalidate_credential('read-token')
-                wait_until(lambda:credential_is(reader['sessionId'],rotated))
-                record('Vault invalidation refreshes rotated credentials without polling')
-            finally:
-                vault.write('read-token',original_text)
-                invalidate_credential('read-token')
-                wait_until(lambda:credential_is(reader['sessionId'],original_text))
-        status,stats_before=request(18443,'/internal/stats',internal_client=True);assert status==200
-        for _ in range(20):assert credential_is(reader['sessionId'],original_text)
-        status,stats_after=request(18443,'/internal/stats',internal_client=True);assert status==200
-        assert stats_before['accountGETs']==stats_after['accountGETs'] and stats_before['vaultReads']==stats_after['vaultReads']
-        record('warm authorization performs zero Kubernetes object GETs or Vault reads',grantRequests=20)
-        before=len(audit());scale('auth-ext-proc',0)
+            set_policy(SCOPES[0]);wait_for(lambda:invoke(a,ta,sa,origin=EXTERNAL,path='/external')['status']==200)
+        original=json.loads((CACHE/'dedicated-keys.json').read_text())['reader']
+        set_secret(SCOPES[0],'deliberately-invalid-rotated-key')
         try:
-            result=invoke(token,reader['sessionId'],'GET','/catalog');assert result['status']>=400 and len(audit())==before,result
-            record('unavailable ext_proc fails closed',httpStatus=result['status'])
-        finally:scale('auth-ext-proc',1)
-        # A stopped control plane also stops its port-forward; test its outage through native kagent later.
-        kubectl('-n','demo','rollout','restart','deployment/auth-control-plane')
-        kubectl('-n','demo','rollout','status','deployment/auth-control-plane','--timeout=120s')
-        close_connections()
-        for p in handles:p.terminate();p.wait(timeout=10)
-        handles=[]
-        log=open(CACHE/'portforward-auth-control-plane.log','w')
-        handles.append(subprocess.Popen(['kubectl','--context','auth-demo','-n','demo','port-forward','service/auth-control-plane','18443:8443'],env=ENV,stdout=log,stderr=log))
-        for _ in range(30):
-            try:
-                if request(18443,'/readyz')[0]==200:break
-            except Exception:pass
-            time.sleep(1)
-        status,retry=create('catalog-reader',run_id+'-reader');assert status==200 and retry['sessionId']==reader['sessionId']
-        result=invoke(token,reader['sessionId'],'GET','/catalog');assert result['status']==200,result
-        record('bridge restart preserves PostgreSQL bindings and request idempotency')
-        old=json.loads(kubectl('-n','demo','get','serviceaccount','catalog-reader','-o','json'))
-        kubectl('-n','demo','delete','serviceaccount','catalog-reader')
-        replacement={'apiVersion':'v1','kind':'ServiceAccount','metadata':{
-            'name':'catalog-reader','namespace':'demo','labels':old['metadata'].get('labels',{}),'annotations':old['metadata'].get('annotations',{})},
-            'automountServiceAccountToken':False}
-        subprocess.run(['kubectl','--context','auth-demo','apply','-f','-'],env=ENV,input=json.dumps(replacement),text=True,check=True,stdout=subprocess.DEVNULL)
-        wait_until(lambda:context_for(reader['sessionId'])[0]==403)
-        result=invoke(token,reader['sessionId'],'GET','/catalog');assert result['status']==403
-        record('recreated ServiceAccount UID cannot inherit an existing binding')
-        delete_native(writer['sessionId'])
-        status,before_gc=context_for(writer['sessionId']);assert status==200,(status,before_gc)
-        status,gc=request(18443,'/internal/reconcile',{},internal_client=True);assert status==200,(status,gc)
-        assert gc['ConfirmedDeleted']>=1,gc
-        assert context_for(writer['sessionId'])[0]==403
-        status,_=create('catalog-writer',run_id+'-writer');assert status==409
-        record('asynchronous reconciliation revokes externally deleted native Sessions',cleanup=gc)
-        for sid in sessions:delete_session(token,sid)
-        sessions=[]
-        status,_=request(18443,f'/v1/sessions/{reader["sessionId"]}/invoke',{'method':'GET','path':'/catalog'},token)
-        assert status==403;record('deleted session bindings cannot invoke the Agent')
-        (ROOT/'artifacts').mkdir(exist_ok=True)
-        report={'cluster':'auth-demo','driver':'minikube/docker','kagent':'1.0.0-alpha17','substrate':'0.6.0-alpha3','tests':RESULTS}
-        (ROOT/'artifacts/e2e-results.json').write_text(json.dumps(report,indent=2)+'\n')
-        print(f'{len(RESULTS)} integration checks passed on local Minikube.',flush=True)
+            wait_for(lambda:invoke(a,ta,sa)['status']==401,seconds=120)
+            assert invoke(b,tb,sb)['status']==200
+            record('projected Secret rotation reaches upstream without restart and stays isolated')
+        finally:
+            set_secret(SCOPES[0],original);wait_for(lambda:invoke(a,ta,sa)['status']==200,seconds=120)
+        before=request(a,'/internal/stats',admin=True)[1]
+        # kagent serializes Session messages. Generate concurrent application
+        # requests inside one invocation, so this measures egress authorization
+        # rather than racing the native Session state machine.
+        warm=invoke(a,ta,sa,load={'concurrency':4,'durationSeconds':2})
+        assert warm['completed']>0 and warm['statuses']=={'200':warm['completed']} and warm['credentialFailures']==0,warm
+        after=request(a,'/internal/stats',admin=True)[1]
+        for key in ['accountGETs','policyGETs','listCalls','credentialFileLoads','oauthExchanges']:assert after[key]==before[key],(key,before,after)
+        record('warm concurrent authorization makes no Kubernetes GETs or credential reloads',requests=warm['completed'])
+        # A separate benchmark command records bounded load, without repeated session creation.
+        if __import__('os').environ.get('AUTH_BENCHMARK')=='1':
+            loads=[]
+            for n in [1,8,32]:
+                result=invoke(a,ta,sa,load={'concurrency':n,'durationSeconds':5})
+                assert result['completed']>0 and result['statuses']=={'200':result['completed']} and result['credentialFailures']==0,result
+                loads.append(result);print('LOAD',n,result['requestsPerSecond'],flush=True)
+            record('bounded HTTP load succeeds through dedicated gateway',loads=loads)
+        kubectl('-n',SCOPES[0],'rollout','restart','deploy/agent-egress')
+        kubectl('-n',SCOPES[0],'rollout','status','deploy/agent-egress','--timeout=180s')
+        forwards[0].close();forwards[0]=Forward(SCOPES[0],'authorizer',a)
+        wait_for(lambda:request(a,'/readyz')[0]==200)
+        assert invoke(a,ta,sa)['status']==200
+        body={'agent':{'namespace':SCOPES[0],'name':AGENT},'serviceAccount':'agent-caller','requestId':run_id}
+        status,retry=request(a,'/v1/sessions',body,ta);assert status==200 and retry['sessionId']==sa,(status,retry)
+        record('bundle restart preserves PostgreSQL bindings and idempotency')
+        # Verify a replaced identity cannot inherit permissions, even with the same name.
+        account=json.loads(kubectl('-n',SCOPES[0],'get','sa','agent-caller','-o','json'))
+        kubectl('-n',SCOPES[0],'delete','sa','agent-caller')
+        apply([{'apiVersion':'v1','kind':'ServiceAccount','metadata':{'name':'agent-caller','namespace':SCOPES[0],'labels':account['metadata']['labels'],'annotations':account['metadata']['annotations']},'automountServiceAccountToken':False}])
+        wait_for(lambda:invoke(a,ta,sa)['status']==403)
+        record('ServiceAccount UID replacement revokes existing Session')
+        report={'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat(),'cluster':'auth-demo','architecture':'dedicated Envoy + in-process authorizer per agent namespace','tests':RESULTS}
+        (ROOT/'artifacts/dedicated-e2e.json').write_text(json.dumps(report,indent=2)+'\n')
     finally:
-        for sid in sessions:
-            try:
-                delete_session(token,sid)
-            except Exception as error:print(f'Session cleanup failed: {error}',flush=True)
-        close_connections()
-        for p in handles:
-            p.terminate()
-            try:p.wait(timeout=10)
-            except subprocess.TimeoutExpired:p.kill()
-
+        for i,sid in enumerate(sessions):
+            for _ in range(15):
+                try:
+                    status,_=request(18543+i,f'/v1/sessions/{sid}',token=tokens[i],method='DELETE')
+                    if status==200:break
+                    if status!=409:break
+                except Exception:break
+                time.sleep(1)
+        for f in forwards:f.close()
 if __name__=='__main__':main()

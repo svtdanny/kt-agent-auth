@@ -41,6 +41,7 @@ type Server struct {
 	Kagent           apiv1.SessionServiceClient
 	A2A              a2apb.A2AServiceClient
 	Namespace        string
+	AgentName        string
 	TokenPath        string
 	Objects          ObjectState
 	Credentials      credential.Provider
@@ -91,20 +92,6 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /v1/sessions", s.create)
 	m.HandleFunc("POST /v1/sessions/{id}/invoke", s.invoke)
 	m.HandleFunc("DELETE /v1/sessions/{id}", s.delete)
-	m.HandleFunc("GET /internal/context", func(w http.ResponseWriter, r *http.Request) {
-		if !internal(r) {
-			reject(w, 403, fmt.Errorf("ext-proc client certificate required"))
-			return
-		}
-		out, err := s.resolve(r.Context(), r.URL.Query().Get("spiffeId"))
-		if err != nil {
-			reject(w, 403, err)
-			return
-		}
-		write(w, 200, out)
-	})
-	m.HandleFunc("POST /internal/credential", s.credential)
-	m.HandleFunc("POST /internal/pods", s.registerPod)
 	m.HandleFunc("GET /internal/stats", func(w http.ResponseWriter, r *http.Request) {
 		if !internal(r) {
 			reject(w, 403, fmt.Errorf("ext-proc client certificate required"))
@@ -196,7 +183,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		reject(w, 400, err)
 		return
 	}
-	if in.Agent.Namespace != s.Namespace || in.Agent.Name == "" || in.ServiceAccount == "" || in.RequestID == "" {
+	if in.Agent.Namespace != s.Namespace || (s.AgentName != "" && in.Agent.Name != s.AgentName) || in.Agent.Name == "" || in.ServiceAccount == "" || in.RequestID == "" {
 		reject(w, 400, fmt.Errorf("agent, account and requestId in the demo namespace are required"))
 		return
 	}
@@ -209,7 +196,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		reject(w, 403, err)
 		return
 	}
-	if sa.Annotations[api.PolicyTypeAnnotation] == "" {
+	if _, policyErr := s.Objects.Policy(r.Context(), sa); policyErr != nil {
 		reject(w, 403, fmt.Errorf("account has no policy type"))
 		return
 	}
@@ -235,7 +222,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Scope upstream idempotency by authenticated caller, never by a caller-supplied user header.
-	key := fmt.Sprintf("auth-demo-%x", sha256.Sum256([]byte(u.Username+"\x00"+in.RequestID)))
+	key := fmt.Sprintf("auth-demo-%x", sha256.Sum256([]byte(s.Namespace+"/"+s.AgentName+"\x00"+u.Username+"\x00"+in.RequestID)))
 	created, err := s.Kagent.CreateSession(ctx, &apiv1.CreateSessionRequest{Agent: &apiv1.ResourceReference{Namespace: in.Agent.Namespace, Name: in.Agent.Name}, RequestId: key})
 	if err != nil {
 		reject(w, 503, err)
@@ -246,7 +233,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		reject(w, 503, err)
 		return
 	}
-	slog.Info("session bound", "session", b.SessionID, "user", b.User, "serviceAccount", b.Account.String(), "policyType", sa.Annotations[api.PolicyTypeAnnotation])
+	slog.Info("session bound", "session", b.SessionID, "user", b.User, "serviceAccount", b.Account.String(), "policyRef", sa.Annotations[api.PolicyRefAnnotation])
 	write(w, 200, b)
 }
 func (s *Server) owned(r *http.Request) (api.Binding, error) {
@@ -258,7 +245,7 @@ func (s *Server) owned(r *http.Request) (api.Binding, error) {
 	if err != nil {
 		return b, err
 	}
-	if b.User != u.Username {
+	if b.User != u.Username || b.Agent.Namespace != s.Namespace || (s.AgentName != "" && b.Agent.Name != s.AgentName) {
 		return b, fmt.Errorf("session is not owned by caller")
 	}
 	return b, nil
@@ -324,9 +311,6 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) resolve(ctx context.Context, id string) (api.SessionContext, error) {
 	s.ContextReads.Add(1)
-	if ns, uid, err := api.ParsePod(id); err == nil {
-		return s.resolvePod(ctx, ns, uid)
-	}
 	ns, sid, err := api.ParseActor(id)
 	if err != nil {
 		return api.SessionContext{}, err
@@ -335,7 +319,7 @@ func (s *Server) resolve(ctx context.Context, id string) (api.SessionContext, er
 	if err != nil {
 		return api.SessionContext{}, err
 	}
-	if !b.Active || b.Atespace != ns {
+	if !b.Active || b.Atespace != ns || b.Agent.Namespace != ns || ns != s.Namespace || (s.AgentName != "" && b.Agent.Name != s.AgentName) {
 		return api.SessionContext{}, fmt.Errorf("inactive or mismatched session binding")
 	}
 	// Native Session identity was established at CreateSession. Egress uses
@@ -348,54 +332,67 @@ func (s *Server) resolve(ctx context.Context, id string) (api.SessionContext, er
 	if sa.Labels[api.ManagedLabel] != "true" || string(sa.UID) != b.AccountUID {
 		return api.SessionContext{}, fmt.Errorf("service account was replaced")
 	}
-	p := api.Policy{Type: sa.Annotations[api.PolicyTypeAnnotation], Config: json.RawMessage(sa.Annotations[api.PolicyConfigAnnotation]), Version: sa.ResourceVersion}
-	if p.Type == "" || !json.Valid(p.Config) {
-		return api.SessionContext{}, fmt.Errorf("account has no valid policy")
+	p, err := s.Objects.Policy(ctx, sa)
+	if err != nil {
+		return api.SessionContext{}, err
 	}
 	return api.SessionContext{Binding: b, Policy: p}, nil
 }
-func (s *Server) credential(w http.ResponseWriter, r *http.Request) {
-	if !internal(r) {
-		reject(w, 403, fmt.Errorf("ext-proc client certificate required"))
-		return
+
+// Authorize is called in-process by ext_proc; no context/credential HTTP round trips.
+func (s *Server) Authorize(ctx context.Context, id string, request api.Request) (api.Authorization, error) {
+	for attempt := 0; attempt < 2; attempt++ {
+		sc, err := s.resolve(ctx, id)
+		if err != nil {
+			return api.Authorization{}, &api.ControlError{Status: 403, Message: "caller is outside this agent or its binding is revoked"}
+		}
+		d, err := policy.Evaluate(ctx, sc, request)
+		if err != nil {
+			return api.Authorization{}, &api.ControlError{Status: 403, Message: "invalid request policy"}
+		}
+		result := api.Authorization{Context: sc, Decision: d}
+		if !d.Allowed {
+			return result, nil
+		}
+		if d.Credential != "" {
+			value, err := s.Credentials.Read(ctx, sc.Binding.Account.Namespace, d.Credential)
+			if err != nil {
+				return api.Authorization{}, &api.ControlError{Status: 503, Message: "credential unavailable"}
+			}
+			if value == "" || strings.ContainsAny(value, "\r\n") {
+				return api.Authorization{}, &api.ControlError{Status: 403, Message: "invalid credential"}
+			}
+			if d.Headers == nil {
+				d.Headers = map[string]string{}
+			}
+			if prior, ok := d.Headers["authorization"]; ok && prior != "Bearer "+value {
+				return api.Authorization{}, &api.ControlError{Status: 403, Message: "conflicting credentials"}
+			}
+			d.Headers["authorization"] = "Bearer " + value
+		}
+		// Credential acquisition can wait on a remote endpoint. Recheck revocation
+		// after that wait as well as the watched policy snapshot.
+		if d.Credential != "" {
+			current, err := s.Store.Binding(sc.Binding.SessionID)
+			if err != nil || !current.Active || current != sc.Binding {
+				return api.Authorization{}, &api.ControlError{Status: 403, Message: "session binding revoked during authorization"}
+			}
+		}
+		// No Kubernetes query is made here on cache hits.
+		sa, err := s.Objects.Account(ctx, sc.Binding.Account.Namespace, sc.Binding.Account.Name)
+		if err != nil || string(sa.UID) != sc.Binding.AccountUID {
+			return api.Authorization{}, &api.ControlError{Status: 403, Message: "account identity revoked"}
+		}
+		latest, err := s.Objects.Policy(ctx, sa)
+		if err != nil {
+			return api.Authorization{}, &api.ControlError{Status: 403, Message: "policy revoked"}
+		}
+		if latest.Version != sc.Policy.Version {
+			s.VersionConflicts.Add(1)
+			continue
+		}
+		result.Decision = d
+		return result, nil
 	}
-	var in api.CredentialRequest
-	if err := decode(w, r, &in); err != nil {
-		reject(w, 400, err)
-		return
-	}
-	s.GrantReads.Add(1)
-	// Recheck against the newest snapshot delivered by the watch. The accepted
-	// consistency model is eventual, without per-request authority reads.
-	sc, err := s.resolve(r.Context(), in.SpiffeID)
-	if err != nil {
-		reject(w, 403, err)
-		return
-	}
-	if sc.Policy.Version != in.PolicyVersion {
-		s.VersionConflicts.Add(1)
-		reject(w, 409, fmt.Errorf("policy changed during evaluation"))
-		return
-	}
-	// Reauthorize the exact request before releasing a secret; the processor cannot name arbitrary Secrets.
-	d, err := policy.Evaluate(r.Context(), sc, in.Request)
-	if err != nil || !d.Allowed || d.Credential != in.Name {
-		reject(w, 403, fmt.Errorf("credential is not granted by the current policy"))
-		return
-	}
-	// Policies without a credential also require current-policy authorization.
-	if in.Name == "" {
-		write(w, 200, map[string]string{})
-		return
-	}
-	value, err := s.Credentials.Read(r.Context(), sc.Binding.Account.Namespace, in.Name)
-	if err != nil {
-		reject(w, 503, err)
-		return
-	}
-	if value == "" || strings.ContainsAny(value, "\r\n") {
-		reject(w, 403, fmt.Errorf("invalid credential"))
-		return
-	}
-	write(w, 200, map[string]string{"authorization": "Bearer " + value})
+	return api.Authorization{}, &api.ControlError{Status: 503, Message: "policy changed during authorization"}
 }

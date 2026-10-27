@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"example.com/auth-demo/internal/credential"
 	"log"
 	"net/http"
 	"os"
@@ -57,8 +55,8 @@ func newHandler(readerToken, writerToken string) http.Handler {
 func main() {
 	var reader, writer string
 	if path := os.Getenv("MOCK_KEYS_FILE"); path != "" {
-		// The external Docker fixture loads its expected synthetic keys from
-		// Vault at setup. This file is outside Kubernetes and excluded from Git.
+		// The fixture loads synthetic expected keys from a mounted file.
+		// Credential values never appear in its audit output.
 		var keys struct {
 			Reader string `json:"reader"`
 			Writer string `json:"writer"`
@@ -72,27 +70,9 @@ func main() {
 		}
 		reader, writer = keys.Reader, keys.Writer
 	} else {
-		provider, err := credential.FromEnv()
-		if err != nil {
-			log.Fatal(err)
-		}
-		readerRef := os.Getenv("MOCK_READER_REF")
-		if readerRef == "" {
-			readerRef = "mock/reader"
-		}
-		writerRef := os.Getenv("MOCK_WRITER_REF")
-		if writerRef == "" {
-			writerRef = "mock/writer"
-		}
-		reader, err = provider.Read(context.Background(), "demo", readerRef)
-		if err != nil {
-			log.Fatal(err)
-		}
-		writer, err = provider.Read(context.Background(), "demo", writerRef)
-		if err != nil {
-			log.Fatal(err)
-		}
+		log.Fatal("MOCK_KEYS_FILE is required")
 	}
+
 	mux := newHandler(reader, writer)
 	if os.Getenv("MOCK_PLAINTEXT") == "true" {
 		log.Fatal(http.ListenAndServe(":8080", mux))

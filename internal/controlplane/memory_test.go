@@ -11,7 +11,6 @@ import (
 
 // Test double only; production uses PostgreSQL exclusively.
 type memoryStore struct {
-	pods     map[string]api.Binding
 	mu       sync.Mutex
 	launches map[string]store.Launch
 	bindings map[string]api.Binding
@@ -20,25 +19,7 @@ type memoryStore struct {
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{pods: map[string]api.Binding{}, launches: map[string]store.Launch{}, bindings: map[string]api.Binding{}, created: map[string]time.Time{}}
-}
-func (m *memoryStore) RegisterPod(b api.Binding) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if old, ok := m.pods[b.PodUID]; ok && old != b {
-		return fmt.Errorf("immutable Pod binding")
-	}
-	m.pods[b.PodUID] = b
-	return nil
-}
-func (m *memoryStore) PodBinding(uid string) (api.Binding, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	b, ok := m.pods[uid]
-	if !ok {
-		return b, fmt.Errorf("unregistered Pod")
-	}
-	return b, nil
+	return &memoryStore{launches: map[string]store.Launch{}, bindings: map[string]api.Binding{}, created: map[string]time.Time{}}
 }
 func (m *memoryStore) Reserve(user string, r api.CreateSession, uid string) (store.Launch, error) {
 	m.mu.Lock()

@@ -1,10 +1,8 @@
 package extproc
 
 import (
-	"context"
 	"testing"
 
-	"example.com/auth-demo/internal/api"
 	extv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -25,8 +23,7 @@ func TestEnvoyUsesCertificateFilterStateAndActualDestinationPort(t *testing.T) {
 		valid             bool
 	}{
 		{"egress_tls_mitm", actor, "10.0.0.1:443", true},
-		{"managed_pod_tls", testPodIdentity, "10.0.0.1:443", true},
-		{"managed_pod_http", testPodIdentity, "10.0.0.1:8080", true},
+
 		{"managed_pod_tls", actor, "10.0.0.1:443", false},
 		{"egress_tls_mitm", testPodIdentity, "10.0.0.1:443", false},
 		{"egress_tls_mitm", actor, "", false},
@@ -42,32 +39,5 @@ func TestEnvoyUsesCertificateFilterStateAndActualDestinationPort(t *testing.T) {
 				t.Fatal("lost trusted identity")
 			}
 		})
-	}
-}
-
-type podControl struct {
-	control
-	inactive bool
-}
-
-func (p *podControl) Resolve(context.Context, string) (api.SessionContext, error) {
-	return api.SessionContext{Binding: api.Binding{PodUID: "019a132e-2e49-7000-8000-000000000001", Active: !p.inactive}}, nil
-}
-
-func TestManagedPodCONNECTOnlyEntersInspectionAndReleasesNoCredentials(t *testing.T) {
-	for _, tc := range []struct {
-		id, target        string
-		inactive, allowed bool
-	}{
-		{testPodIdentity, "10.0.0.1:443", false, true},
-		{testPodIdentity, "10.0.0.1:443", true, false},
-		{testPodIdentity, "attacker.example:443", false, false},
-		{"spiffe://attacker/ns/demo/pod/019a132e-2e49-7000-8000-000000000001", "10.0.0.1:443", false, false},
-	} {
-		p := &podControl{inactive: tc.inactive}
-		response := (&Server{Control: p}).Evaluate(context.Background(), envoyMessage("managed_pod_connect", tc.id, tc.target))
-		if (response.GetRequestHeaders() != nil) != tc.allowed || p.released != 0 {
-			t.Fatalf("unsafe tunnel grant: %v", response)
-		}
 	}
 }

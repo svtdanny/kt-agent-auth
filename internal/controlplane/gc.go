@@ -75,7 +75,7 @@ func (s *Server) Reconcile(ctx context.Context) (GCResult, error) {
 	}
 	missing := []string{}
 	for _, b := range bindings {
-		if live[b.SessionID] {
+		if b.Agent.Namespace != s.Namespace || (s.AgentName != "" && b.Agent.Name != s.AgentName) || live[b.SessionID] {
 			continue
 		}
 		s.NativeReads.Add(1)

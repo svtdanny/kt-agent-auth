@@ -13,8 +13,6 @@ import (
 )
 
 type Repository interface {
-	RegisterPod(api.Binding) error
-	PodBinding(string) (api.Binding, error)
 	Reserve(string, api.CreateSession, string) (Launch, error)
 	Activate(Launch, api.Binding) error
 	Binding(string) (api.Binding, error)
@@ -68,8 +66,7 @@ CREATE TABLE IF NOT EXISTS auth_bridge.launches (
  caller text NOT NULL,request_id text NOT NULL,request jsonb NOT NULL,
  account_uid text NOT NULL,binding jsonb,created_at timestamptz NOT NULL DEFAULT now(),
  retired_at timestamptz,PRIMARY KEY(caller,request_id));
-CREATE TABLE IF NOT EXISTS auth_bridge.metadata(key text PRIMARY KEY,value text NOT NULL);
-CREATE TABLE IF NOT EXISTS auth_bridge.pod_bindings (pod_uid text PRIMARY KEY,data jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());`)
+`)
 	if err != nil {
 		return err
 	}

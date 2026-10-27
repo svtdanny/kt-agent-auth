@@ -1,3 +1,0 @@
-# Unchanged upstream binary; add the demo's private upstream CA to system roots.
-FROM ghcr.io/nvidia/openshell/supervisor:0.1.5@sha256:fabcd01f656e9d23df4386f82e80b4f48b90f3452d7d5c58889007643a069161
-COPY upstream-ca.pem /etc/ssl/certs/ca-certificates.crt

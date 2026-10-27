@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -13,14 +14,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
 
 type ObjectState interface {
-	Pod(context.Context, string, string) (*corev1.Pod, error)
 	Account(context.Context, string, string) (*corev1.ServiceAccount, error)
+	Policy(context.Context, *corev1.ServiceAccount) (api.Policy, error)
 	Stats() map[string]uint64
 }
 
@@ -30,8 +32,8 @@ type WatchedState struct {
 	kube                                             kubernetes.Interface
 	namespace                                        string
 	accounts                                         cache.SharedIndexInformer
-	pods                                             cache.SharedIndexInformer
-	podGets, podEvents                               atomic.Uint64
+	policies                                         cache.SharedIndexInformer
+	policyGets                                       atomic.Uint64
 	mu                                               sync.Mutex
 	missing                                          map[string]bool
 	misses                                           singleflight.Group
@@ -54,30 +56,29 @@ func NewWatchedState(k kubernetes.Interface, ns string) *WatchedState {
 	}
 	w.accounts = cache.NewSharedIndexInformer(cache.ToListWatcherWithWatchListSemantics(lw, k), &corev1.ServiceAccount{}, 0, cache.Indexers{})
 	_, _ = w.accounts.AddEventHandler(cache.ResourceEventHandlerFuncs{AddFunc: func(o any) { w.accountEvent(o, false) }, UpdateFunc: func(_, o any) { w.accountEvent(o, false) }, DeleteFunc: func(o any) { w.accountEvent(o, true) }})
-	pods := &cache.ListWatch{
+	policyWatch := &cache.ListWatch{
 		ListWithContextFunc: func(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) {
 			w.lists.Add(1)
-			o.LabelSelector = "auth.demo.dev/egress=enforced"
-			return k.CoreV1().Pods(ns).List(ctx, o)
+			o.LabelSelector = api.ManagedLabel + "=true"
+			return k.CoreV1().ConfigMaps(ns).List(ctx, o)
 		},
 		WatchFuncWithContext: func(ctx context.Context, o metav1.ListOptions) (watch.Interface, error) {
 			w.watches.Add(1)
-			o.LabelSelector = "auth.demo.dev/egress=enforced"
-			return k.CoreV1().Pods(ns).Watch(ctx, o)
+			o.LabelSelector = api.ManagedLabel + "=true"
+			return k.CoreV1().ConfigMaps(ns).Watch(ctx, o)
 		},
 	}
-	w.pods = cache.NewSharedIndexInformer(cache.ToListWatcherWithWatchListSemantics(pods, k), &corev1.Pod{}, 0, cache.Indexers{})
-	event := func(o any, deleted bool) { w.podEvents.Add(1); w.mark("pod/"+objectKey(o), deleted) }
-	_, _ = w.pods.AddEventHandler(cache.ResourceEventHandlerFuncs{AddFunc: func(o any) { event(o, false) }, UpdateFunc: func(_, o any) { event(o, false) }, DeleteFunc: func(o any) { event(o, true) }})
+	w.policies = cache.NewSharedIndexInformer(cache.ToListWatcherWithWatchListSemantics(policyWatch, k), &corev1.ConfigMap{}, 0, cache.Indexers{})
+	_, _ = w.policies.AddEventHandler(cache.ResourceEventHandlerFuncs{AddFunc: func(o any) { w.mark("policy/"+objectKey(o), false) }, UpdateFunc: func(_, o any) { w.mark("policy/"+objectKey(o), false) }, DeleteFunc: func(o any) { w.mark("policy/"+objectKey(o), true) }})
 	return w
 }
 func (w *WatchedState) Start(ctx context.Context) error {
 	go w.accounts.RunWithContext(ctx)
-	go w.pods.RunWithContext(ctx)
+	go w.policies.RunWithContext(ctx)
 	ready, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if !cache.WaitForCacheSync(ready.Done(), w.accounts.HasSynced, w.pods.HasSynced) {
-		return fmt.Errorf("ServiceAccount initial synchronization failed: %w", ready.Err())
+	if !cache.WaitForCacheSync(ready.Done(), w.accounts.HasSynced, w.policies.HasSynced) {
+		return fmt.Errorf("Policy/ServiceAccount initial synchronization failed: %w", ready.Err())
 	}
 	return nil
 }
@@ -158,41 +159,40 @@ func sharedRead[T any](ctx context.Context, g *singleflight.Group, key string, l
 	}
 }
 func (w *WatchedState) Stats() map[string]uint64 {
-	return map[string]uint64{"podGETs": w.podGets.Load(), "podEvents": w.podEvents.Load(), "accountGETs": w.accountGets.Load(), "listCalls": w.lists.Load(), "watchCalls": w.watches.Load(), "accountEvents": w.accountEvents.Load(), "cacheHits": w.hits.Load()}
+	return map[string]uint64{"policyGETs": w.policyGets.Load(), "accountGETs": w.accountGets.Load(), "listCalls": w.lists.Load(), "watchCalls": w.watches.Load(), "accountEvents": w.accountEvents.Load(), "cacheHits": w.hits.Load()}
 }
 
-func (w *WatchedState) Pod(ctx context.Context, ns, name string) (*corev1.Pod, error) {
-	if ns != w.namespace {
-		return nil, fmt.Errorf("Pod is outside the managed namespace")
+// Policy is a namespaced ConfigMap reference. Full policy bodies never live on identities.
+func (w *WatchedState) Policy(ctx context.Context, sa *corev1.ServiceAccount) (api.Policy, error) {
+	name := sa.Annotations[api.PolicyRefAnnotation]
+	if sa.Namespace != w.namespace || len(validation.IsDNS1123Subdomain(name)) != 0 {
+		return api.Policy{}, fmt.Errorf("account has no policy reference in this scope")
 	}
-	key := ns + "/" + name
-	if o, exists, err := w.pods.GetStore().GetByKey(key); err != nil {
-		return nil, err
-	} else if exists {
-		p := o.(*corev1.Pod)
-		if p.Labels["auth.demo.dev/egress"] != "enforced" {
-			return nil, fmt.Errorf("Pod is not enrolled")
+	key := sa.Namespace + "/" + name
+	var cm *corev1.ConfigMap
+	if o, ok, err := w.policies.GetStore().GetByKey(key); err != nil {
+		return api.Policy{}, err
+	} else if ok {
+		cm = o.(*corev1.ConfigMap)
+	} else {
+		if w.isMissing("policy/" + key) {
+			return api.Policy{}, fmt.Errorf("policy was deleted")
 		}
-		w.hits.Add(1)
-		return p.DeepCopy(), nil
-	}
-	if w.isMissing("pod/" + key) {
-		return nil, fmt.Errorf("Pod no longer enrolled")
-	}
-	p, err := sharedRead(ctx, &w.misses, "pod/"+key, func(ctx context.Context) (*corev1.Pod, error) {
-		w.podGets.Add(1)
-		p, err := w.kube.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			w.mark("pod/"+key, true)
+		var err error
+		cm, err = sharedRead(ctx, &w.misses, "policy/"+key, func(ctx context.Context) (*corev1.ConfigMap, error) {
+			w.policyGets.Add(1)
+			cm, err := w.kube.CoreV1().ConfigMaps(sa.Namespace).Get(ctx, name, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) || (err == nil && cm.Labels[api.ManagedLabel] != "true") {
+				w.mark("policy/"+key, true)
+			}
+			return cm, err
+		})
+		if err != nil {
+			return api.Policy{}, fmt.Errorf("policy unavailable")
 		}
-		if err == nil && p.Labels["auth.demo.dev/egress"] != "enforced" {
-			w.mark("pod/"+key, true)
-			return nil, fmt.Errorf("Pod is not enrolled")
-		}
-		return p, err
-	})
-	if err != nil {
-		return nil, err
 	}
-	return p.DeepCopy(), nil
+	if cm.Labels[api.ManagedLabel] != "true" || cm.Data["type"] == "" || !json.Valid([]byte(cm.Data["config"])) {
+		return api.Policy{}, fmt.Errorf("policy is invalid or unmanaged")
+	}
+	return api.Policy{Type: cm.Data["type"], Config: json.RawMessage(cm.Data["config"]), Version: string(sa.UID) + ":" + sa.ResourceVersion + ":" + string(cm.UID) + ":" + cm.ResourceVersion}, nil
 }

@@ -7,13 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"example.com/auth-demo/internal/api"
-	"example.com/auth-demo/internal/policy"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
@@ -24,13 +22,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type ControlPlane interface {
-	Resolve(context.Context, string) (api.SessionContext, error)
-	Credential(context.Context, api.CredentialRequest) (map[string]string, error)
+type Authorizer interface {
+	Authorize(context.Context, string, api.Request) (api.Authorization, error)
 }
 type Server struct {
 	extv3.UnimplementedExternalProcessorServer
-	Control ControlPlane
+	Control Authorizer
 }
 
 func (s *Server) Process(stream extv3.ExternalProcessor_ProcessServer) error {
@@ -39,7 +36,7 @@ func (s *Server) Process(stream extv3.ExternalProcessor_ProcessServer) error {
 		return status.Error(codes.Unauthenticated, "gateway identity required")
 	}
 	tls, ok := p.AuthInfo.(credentials.TLSInfo)
-	if !ok || len(tls.State.VerifiedChains) == 0 || len(tls.State.PeerCertificates) == 0 || (tls.State.PeerCertificates[0].Subject.CommonName != "agentgateway" && tls.State.PeerCertificates[0].Subject.CommonName != "auth-egress") {
+	if !ok || len(tls.State.VerifiedChains) == 0 || len(tls.State.PeerCertificates) == 0 || tls.State.PeerCertificates[0].Subject.CommonName != "auth-egress" {
 		return status.Error(codes.Unauthenticated, "authenticated gateway required")
 	}
 	for {
@@ -66,62 +63,27 @@ func reject(reason string, code typev3.StatusCode) *extv3.ProcessingResponse {
 	return &extv3.ProcessingResponse{Response: &extv3.ProcessingResponse_ImmediateResponse{ImmediateResponse: &extv3.ImmediateResponse{Status: &typev3.HttpStatus{Code: code}, Body: []byte("request denied: " + reason), Details: "auth_demo_denied"}}}
 }
 func (s *Server) Evaluate(ctx context.Context, message *extv3.ProcessingRequest) *extv3.ProcessingResponse {
-	if attribute(message, "xds.filter_chain_name") == "managed_pod_connect" {
-		return s.podTunnel(ctx, message)
-	}
 	id, r, err := parse(message)
 	if err != nil {
 		return deny("missing or invalid gateway context")
 	}
-	return s.evaluateRequest(ctx, id, r, false)
+	return s.evaluateRequest(ctx, id, r)
 }
-func (s *Server) evaluateRequest(ctx context.Context, id string, r api.Request, retried bool) *extv3.ProcessingResponse {
-	sc, err := s.Control.Resolve(ctx, id)
+func (s *Server) evaluateRequest(ctx context.Context, id string, r api.Request) *extv3.ProcessingResponse {
+	result, err := s.Control.Authorize(ctx, id, r)
 	if err != nil {
-		slog.Warn("identity resolution denied", "error", err)
 		var control *api.ControlError
 		if errors.As(err, &control) && control.Status == 403 {
-			return deny("session authorization denied")
+			return deny("authorization denied")
 		}
-		return reject("session authorization unavailable", typev3.StatusCode_ServiceUnavailable)
+		return reject("authorization unavailable", typev3.StatusCode_ServiceUnavailable)
 	}
-	d, err := policy.Evaluate(ctx, sc, r)
-	if err != nil {
-		return deny("policy evaluation failed")
-	}
+	d := result.Decision
 	if !d.Allowed {
-		slog.Info("policy decision", "session", sc.Binding.SessionID, "allowed", false, "reason", d.Reason)
 		return deny(d.Reason)
 	}
-	headers := make(map[string]string, len(d.Headers))
-	for key, value := range d.Headers {
-		headers[strings.ToLower(key)] = value
-	}
-	// Every allow must pass the bridge's current policy snapshot check, including policies
-	// that only filter or mutate headers and do not request a Secret.
-	credentialHeaders, err := s.Control.Credential(ctx, api.CredentialRequest{SpiffeID: id, PolicyVersion: sc.Policy.Version, Name: d.Credential, Request: r})
-	if err != nil {
-		var control *api.ControlError
-		if errors.As(err, &control) {
-			if control.Status == 409 && !retried {
-				return s.evaluateRequest(ctx, id, r, true)
-			}
-			if control.Status == 403 {
-				slog.Warn("authorization denied", "session", sc.Binding.SessionID, "error", err)
-				return deny("credential authorization denied")
-			}
-		}
-		slog.Warn("authorization unavailable", "session", sc.Binding.SessionID, "error", err)
-		return reject("credential authorization unavailable", typev3.StatusCode_ServiceUnavailable)
-	}
-	slog.Info("policy decision", "session", sc.Binding.SessionID, "podUid", sc.Binding.PodUID, "permissions", d.Permissions, "agent", sc.Binding.Agent.String(), "serviceAccount", sc.Binding.Account.String(), "policyType", sc.Policy.Type, "method", r.Method, "host", r.Host, "path", r.Path, "allowed", true)
-	for key, value := range credentialHeaders {
-		key = strings.ToLower(key)
-		if prior, exists := headers[key]; exists && prior != value {
-			return deny("conflicting policy mutations")
-		}
-		headers[key] = value
-	}
+	headers := d.Headers
+	slog.Info("policy decision", "session", result.Context.Binding.SessionID, "agent", result.Context.Binding.Agent.String(), "allowed", true)
 	var sets []*corev3.HeaderValueOption
 	for name, value := range headers {
 		if !safeMutation(name, value) {
@@ -138,9 +100,7 @@ func parse(m *extv3.ProcessingRequest) (string, api.Request, error) {
 	}
 	id := attrs.GetFields()["actorSpiffeId"].GetStringValue()
 	if _, _, err := api.ParseActor(id); err != nil {
-		if _, _, podErr := api.ParsePod(id); podErr != nil {
-			return "", api.Request{}, err
-		}
+		return "", api.Request{}, err
 	}
 	port := attrs.GetFields()["destinationPort"].GetNumberValue()
 	if port < 1 || port > 65535 || port != float64(uint16(port)) {
@@ -188,9 +148,4 @@ func safeMutation(name, value string) bool {
 		return false
 	}
 	return true
-}
-
-func Health(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(200)
-	_, _ = w.Write([]byte("ready"))
 }

@@ -1,35 +1,24 @@
 flowchart TB
-    subgraph CLUSTER["One Kubernetes cluster"]
-        subgraph WORKER["kagent worker Pod"]
-            A["Agent sandbox / gVisor or Kata"] -->|"Captured TCP"| T["atunnel"]
-        end
-        subgraph POD["Enrolled custom Pod"]
-            B["Application / commands"] -->|"Captured TCP"| R["Envoy TCP relay"]
-        end
-        T -->|"mTLS CONNECT / Actor identity"| G
-        R -->|"mTLS CONNECT / Pod identity"| G
-        subgraph GATEWAY["SHARED atenet-egress Deployment / Service"]
-            G["Inspecting Envoy / native and Pod listeners"]
-            SDS["sdsmint / automatic destination certificates"]
-            NATIVE["Substrate native Actor authorization"]
-            G <-.->|"SDS / Unix socket"| SDS
-            G <-.->|"Native listener only"| NATIVE
-        end
-        G -->|"Allowed request + injected key"| MCP["Internal MCP Service / other namespace"]
-        G <-.->|"gRPC mTLS / headers, decision, mutations"| EP["OUR Go ext_proc"]
-        EP <-.->|"HTTPS mTLS / context + exact request grant"| CP["OUR control plane"]
-        CP <-->|"Immutable Session or Pod binding"| DB[("Existing PostgreSQL")]
-        CP <-->|"Credential cache miss"| VAULT["Vault"]
-        KUBE["Kubernetes API"] -->|"ServiceAccount / enrolled Pod watches"| CP
+    subgraph WORKER["kagent worker Pod"]
+        A["Agent sandbox"] -->|"Captured TCP"| T["atunnel"]
     end
-    G -->|"Allowed HTTPS + injected key"| EXTERNAL["External API / outside Kubernetes"]
-
-    USER["Authenticated user"] -->|"Create / invoke / delete Session"| CP
-    CP -->|"TokenReview + SAR / account selection"| KUBE
-    CP -->|"Native Session API / A2A"| KAGENT["kagent controller"]
-    KAGENT -->|"Actor lifecycle"| SUB["Substrate API"]
-    SUB -->|"Start / resume sandbox"| A
-    NATIVE <-->|"Actor UID / state / native egress policy"| SUB
-    LAUNCH["Trusted Pod launcher"] -->|"Create enrolled Pod / issue identity cert"| KUBE
-    LAUNCH -->|"Internal mTLS / immutable Pod UID binding"| CP
-    OTHER["Unrelated Pod"] -->|"Existing direct access preserved"| MCP
+    T -->|"mTLS CONNECT / Actor identity"| G
+    subgraph EGRESS["Dedicated egress bundle for Agent A"]
+        G["Inspecting Envoy"]
+        SDS["sdsmint"]
+        AUTH["OUR authorizer: ext_proc + control plane"]
+        NATIVE["Substrate authorization"]
+        SECRETS["Agent A mounted Secret"]
+        G <-.->|"Certificate requests"| SDS
+        G <-.->|"gRPC request / decision / mutations"| AUTH
+        G <-.->|"Native Actor checks"| NATIVE
+        SECRETS --> AUTH
+    end
+    AUTH -->|"Acquire / refresh OAuth token"| LOGIN["External authentication endpoint"]
+    AUTH <-->|"Persistent identity bindings"| DB[("Existing PostgreSQL server")]
+    KUBE["Kubernetes API"] -->|"ServiceAccount / policy ConfigMap watches"| AUTH
+    AUTH -->|"Session API / A2A"| KAGENT["kagent controller"]
+    KAGENT --> SUB["Substrate API + routing overlay"]
+    NATIVE --> SUB
+    G -->|"Allowed request + credentials"| MCP["Internal MCP"]
+    G -->|"Allowed HTTPS + credentials"| EXT["External resource"]

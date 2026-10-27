@@ -1,0 +1,26 @@
+package agentegress
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestOperatorAssignments(t *testing.T) {
+	defer func() { gateways = map[string]string{} }()
+	p := filepath.Join(t.TempDir(), "gateways.json")
+	os.WriteFile(p, []byte(`{"agent-a":"agent-egress.agent-a.svc:443","agent-b":"agent-egress.agent-b.svc:443"}`), 0600)
+	if err := Load(p); err != nil {
+		t.Fatal(err)
+	}
+	if Address("agent-a", "fallback:443") != "agent-egress.agent-a.svc:443" || Address("other", "fallback:443") != "fallback:443" {
+		t.Fatal("scope assignment leaked")
+	}
+	if len(Principals()) != 2 {
+		t.Fatal("identities missing")
+	}
+	os.WriteFile(p, []byte(`{"agent-a":"invalid"}`), 0600)
+	if Load(p) == nil {
+		t.Fatal("invalid assignment accepted")
+	}
+}

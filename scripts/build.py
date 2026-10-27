@@ -1,29 +1,21 @@
 #!/usr/bin/env python3
-"""Build our services and Mastra BYO image; upstream code is a pinned dependency."""
-import os
+"""Build only the dedicated agent authorization runtime and pinned routing overlay."""
+import os,subprocess
 from pathlib import Path
-import subprocess
-
 ROOT=Path(__file__).resolve().parents[1]
-os.chdir(ROOT)
-
-def run(*args,env=None):subprocess.run(args,check=True,env=env)
-
 def main():
-    run('go','test','./...')
-    run('go','vet','./...')
-    run('python3','scripts/test_deploy_bundle.py')
-    run('npm','ci','--prefix','agent','--ignore-scripts')
-    run('node','--test','agent/server.test.mjs')
+    env={**os.environ,'GOCACHE':str(ROOT/'.cache/go-build'),'CGO_ENABLED':'0'}
     (ROOT/'.cache/build').mkdir(parents=True,exist_ok=True)
-    for name in ('control-plane','ext-proc','mastra-adapter','test-api','import-bbolt'):
-        run('go','build','-trimpath','-ldflags=-s -w','-o',str(ROOT/'.cache/build'/name),'./cmd/'+name,env={**os.environ,'CGO_ENABLED':'0'})
-    for name in ('control-plane','ext-proc','test-api','import-bbolt'):
-        run('docker','build','-f','deploy/Dockerfile.services','--build-arg','BINARY='+name,'-t','localhost:5001/auth-demo/'+name+':demo','.')
-        run('docker','push','localhost:5001/auth-demo/'+name+':demo')
-    run('docker','build','-f','deploy/Dockerfile.mastra','-t','localhost:5001/auth-demo/mastra:demo','.')
-    run('docker','push','localhost:5001/auth-demo/mastra:demo')
-    run('docker','build','-f','deploy/Dockerfile.pod-runner','-t','localhost:5001/auth-demo/pod-runner:demo','.')
-    run('docker','push','localhost:5001/auth-demo/pod-runner:demo')
-
+    for args in [['go','test','./...'],['go','vet','./...'],['python3','scripts/test_deploy_bundle.py']]:subprocess.run(args,cwd=ROOT,env=env,check=True)
+    for name in ['authorizer','test-api','mastra-adapter']:
+      subprocess.run(['go','build','-trimpath','-ldflags=-s -w','-o',str(ROOT/'.cache/build'/name),'./cmd/'+name],cwd=ROOT,env=env,check=True)
+    subprocess.run(['npm','ci','--prefix','agent'],cwd=ROOT,check=True)
+    subprocess.run(['node','--test','agent/server.test.mjs'],cwd=ROOT,check=True)
+    subprocess.run(['docker','build','-f','deploy/Dockerfile.mastra','-t','localhost:5001/auth-demo/mastra:dedicated','.'],cwd=ROOT,check=True)
+    subprocess.run(['docker','push','localhost:5001/auth-demo/mastra:dedicated'],check=True)
+    subprocess.run(['python3','scripts/build_substrate.py'],cwd=ROOT,env=env,check=True)
+    for name in ['authorizer','test-api','substrate-api','substrate-atenet']:
+      image='localhost:5001/auth-demo/'+name+':dedicated'
+      subprocess.run(['docker','build','-f','deploy/Dockerfile.services','--build-arg','BINARY='+name,'-t',image,'.'],cwd=ROOT,check=True)
+      subprocess.run(['docker','push',image],check=True)
 if __name__=='__main__':main()

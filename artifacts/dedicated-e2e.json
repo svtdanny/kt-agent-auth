@@ -1,0 +1,128 @@
+{
+  "timestamp": "2026-10-27T12:27:43.432636+00:00",
+  "cluster": "auth-demo",
+  "architecture": "dedicated Envoy + in-process authorizer per agent namespace",
+  "tests": [
+    {
+      "test": "two native Sessions created in separate agent scopes; retries preserve bindings",
+      "passed": true
+    },
+    {
+      "test": "internal HTTP and external HTTPS inject each agent own mounted key",
+      "passed": true
+    },
+    {
+      "test": "operation grants and spoofed identity headers enforced",
+      "passed": true
+    },
+    {
+      "test": "other agent authorizer rejects Session from wrong scope",
+      "passed": true
+    },
+    {
+      "test": "per-bundle mTLS prevents cross-authorizer internal access",
+      "passed": true
+    },
+    {
+      "test": "application credentials mounted only in dedicated authorizer",
+      "passed": true
+    },
+    {
+      "test": "ConfigMap watch revokes one agent while other remains authorized",
+      "passed": true
+    },
+    {
+      "test": "one Session holds multiple grants; removing external grant preserves internal access",
+      "passed": true
+    },
+    {
+      "test": "projected Secret rotation reaches upstream without restart and stays isolated",
+      "passed": true
+    },
+    {
+      "test": "warm concurrent authorization makes no Kubernetes GETs or credential reloads",
+      "passed": true,
+      "requests": 1147
+    },
+    {
+      "test": "bounded HTTP load succeeds through dedicated gateway",
+      "passed": true,
+      "loads": [
+        {
+          "completed": 1493,
+          "elapsedSeconds": 5.002869236,
+          "requestsPerSecond": 298.4287474988482,
+          "concurrency": 1,
+          "offeredDurationSeconds": 5,
+          "statuses": {
+            "200": 1493
+          },
+          "errors": {},
+          "denialReasons": {},
+          "credentialFailures": 0,
+          "readerCredentials": 1493,
+          "writerCredentials": 0,
+          "requestLimitReached": false,
+          "latencyMs": {
+            "p50": 3.0005639999999403,
+            "p95": 3.9001790000002075,
+            "p99": 5.263797999999952,
+            "max": 109.75711799999999
+          }
+        },
+        {
+          "completed": 3695,
+          "elapsedSeconds": 5.004213306,
+          "requestsPerSecond": 738.3777976789546,
+          "concurrency": 8,
+          "offeredDurationSeconds": 5,
+          "statuses": {
+            "200": 3695
+          },
+          "errors": {},
+          "denialReasons": {},
+          "credentialFailures": 0,
+          "readerCredentials": 3695,
+          "writerCredentials": 0,
+          "requestLimitReached": false,
+          "latencyMs": {
+            "p50": 5.4385330000004615,
+            "p95": 52.28494299999966,
+            "p99": 83.24585800000023,
+            "max": 172.73537399999987
+          }
+        },
+        {
+          "completed": 3016,
+          "elapsedSeconds": 5.053017721,
+          "requestsPerSecond": 596.8710514245197,
+          "concurrency": 32,
+          "offeredDurationSeconds": 5,
+          "statuses": {
+            "200": 3016
+          },
+          "errors": {},
+          "denialReasons": {},
+          "credentialFailures": 0,
+          "readerCredentials": 3016,
+          "writerCredentials": 0,
+          "requestLimitReached": false,
+          "latencyMs": {
+            "p50": 29.472285999999713,
+            "p95": 115.96249900000021,
+            "p99": 298.7442850000002,
+            "max": 490.746533
+          }
+        }
+      ]
+    },
+    {
+      "test": "bundle restart preserves PostgreSQL bindings and idempotency",
+      "passed": true
+    },
+    {
+      "test": "ServiceAccount UID replacement revokes existing Session",
+      "passed": true
+    }
+  ]
+}
