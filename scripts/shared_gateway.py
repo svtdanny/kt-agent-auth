@@ -152,6 +152,18 @@ def prepare_images():
     subprocess.run([minikube,'-p','auth-demo','image','load','--daemon',ATENET_IMAGE,ENVOY_IMAGE],env=ENV,check=True)
 
 
+def gateway_ingress_policy():
+    # Selecting a Pod isolates every ingress port on an enforcing CNI. Keep
+    # native Actor traffic and the existing ready/metrics listener reachable;
+    # only the additional managed-Pod listener has the enrollment selector.
+    return {'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':{'name':'auth-managed-pod-gateway','namespace':'ate-system'},'spec':{
+        'podSelector':{'matchLabels':{'app':'atenet-egress'}},'policyTypes':['Ingress'],'ingress':[
+            {'ports':[{'protocol':'TCP','port':8443},{'protocol':'TCP','port':15090}]},
+            {'from':[{'namespaceSelector':{'matchLabels':{'kubernetes.io/metadata.name':'demo'}},
+                      'podSelector':{'matchLabels':{'auth.demo.dev/egress':'enforced'}}}],
+             'ports':[{'protocol':'TCP','port':9443}]}]}}
+
+
 def install(directory=None):
     from deploy import certificates,tls_secret
     directory=directory or certificates()
@@ -161,10 +173,7 @@ def install(directory=None):
     data={k:yaml.safe_dump(v,sort_keys=False) for k,v in sds.items()}
     data['envoy.yaml']=config
     ca=(directory/'ca.crt').read_text()+Path('/etc/ssl/certs/ca-certificates.crt').read_text()
-    pod_ingress={'apiVersion':'networking.k8s.io/v1','kind':'NetworkPolicy','metadata':{'name':'auth-managed-pod-gateway','namespace':'ate-system'},'spec':{
-        'podSelector':{'matchLabels':{'app':'atenet-egress'}},'policyTypes':['Ingress'],'ingress':[{'from':[{
-            'namespaceSelector':{'matchLabels':{'kubernetes.io/metadata.name':'demo'}},
-            'podSelector':{'matchLabels':{'auth.demo.dev/egress':'enforced'}}}],'ports':[{'protocol':'TCP','port':9443}]}]}}
+    pod_ingress=gateway_ingress_policy()
     apply([pod_ingress,{'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'auth-shared-envoy','namespace':'ate-system'},'data':data},
         {'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'auth-upstream-trust','namespace':'ate-system'},'data':{'upstream-ca.pem':ca}},
         tls_secret('auth-gateway-client','agentgateway',directory,'ate-system'),

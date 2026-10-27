@@ -4,7 +4,17 @@ metadata:
   name: auth-managed-pod-gateway
   namespace: ate-system
 spec:
+  podSelector:
+    matchLabels:
+      app: atenet-egress
+  policyTypes:
+  - Ingress
   ingress:
+  - ports:
+    - protocol: TCP
+      port: 8443
+    - protocol: TCP
+      port: 15090
   - from:
     - namespaceSelector:
         matchLabels:
@@ -13,13 +23,8 @@ spec:
         matchLabels:
           auth.demo.dev/egress: enforced
     ports:
-    - port: 9443
-      protocol: TCP
-  podSelector:
-    matchLabels:
-      app: atenet-egress
-  policyTypes:
-  - Ingress
+    - protocol: TCP
+      port: 9443
 ---
 apiVersion: v1
 data:

@@ -1,0 +1,80 @@
+{
+  "startedAtUTC": "2026-10-27T07:56:26.864449+00:00",
+  "cluster": "auth-demo",
+  "completed": true,
+  "networkPolicyServerDryRunAccepted": true,
+  "networkPolicyAppliedToLocalCluster": true,
+  "enforcingCNIValidated": false,
+  "portableReleaseDelivered": false,
+  "checks": [
+    {
+      "source": "session",
+      "destination": "mcp",
+      "matchingGrant": true,
+      "status": 200,
+      "upstreamAuditDelta": 1,
+      "passed": true
+    },
+    {
+      "source": "session",
+      "destination": "mcp",
+      "matchingGrant": false,
+      "status": 403,
+      "upstreamAuditDelta": 0,
+      "passed": true
+    },
+    {
+      "source": "session",
+      "destination": "external",
+      "matchingGrant": true,
+      "status": 200,
+      "upstreamAuditDelta": 1,
+      "passed": true
+    },
+    {
+      "source": "session",
+      "destination": "external",
+      "matchingGrant": false,
+      "status": 403,
+      "upstreamAuditDelta": 0,
+      "passed": true
+    },
+    {
+      "source": "pod",
+      "destination": "mcp",
+      "matchingGrant": true,
+      "status": 200,
+      "upstreamAuditDelta": 1,
+      "passed": true
+    },
+    {
+      "source": "pod",
+      "destination": "mcp",
+      "matchingGrant": false,
+      "status": 403,
+      "upstreamAuditDelta": 0,
+      "passed": true
+    },
+    {
+      "source": "pod",
+      "destination": "external",
+      "matchingGrant": true,
+      "status": 200,
+      "upstreamAuditDelta": 1,
+      "passed": true
+    },
+    {
+      "source": "pod",
+      "destination": "external",
+      "matchingGrant": false,
+      "status": 403,
+      "upstreamAuditDelta": 0,
+      "passed": true
+    }
+  ],
+  "cleanupErrors": [],
+  "gatewayPodUid": "a38c95e6-7028-4fc2-8b6c-39d6589b088f",
+  "commandPodUid": "53e14d2a-ff67-4259-8dfb-fc0efe23abde",
+  "sessionId": "01a17c5c-55da-7dae-a024-a58f05dab220",
+  "finishedAtUTC": "2026-10-27T07:56:45.160203+00:00"
+}

@@ -12,6 +12,7 @@ def run(*args,env=None):subprocess.run(args,check=True,env=env)
 def main():
     run('go','test','./...')
     run('go','vet','./...')
+    run('python3','scripts/test_deploy_bundle.py')
     run('npm','ci','--prefix','agent','--ignore-scripts')
     run('node','--test','agent/server.test.mjs')
     (ROOT/'.cache/build').mkdir(parents=True,exist_ok=True)
