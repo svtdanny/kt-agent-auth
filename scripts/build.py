@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
     env={**os.environ,'GOCACHE':str(ROOT/'.cache/go-build'),'CGO_ENABLED':'0'}
     (ROOT/'.cache/build').mkdir(parents=True,exist_ok=True)
-    for args in [['go','test','./...'],['go','vet','./...'],['python3','scripts/test_deploy_bundle.py']]:subprocess.run(args,cwd=ROOT,env=env,check=True)
+    for args in [['go','test','./...'],['go','vet','./...'],['python3','scripts/test_deploy_bundle.py'],['python3','k8s/test_render.py']]:subprocess.run(args,cwd=ROOT,env=env,check=True)
     for name in ['authorizer','test-api','mastra-adapter']:
       subprocess.run(['go','build','-trimpath','-ldflags=-s -w','-o',str(ROOT/'.cache/build'/name),'./cmd/'+name],cwd=ROOT,env=env,check=True)
     subprocess.run(['npm','ci','--prefix','agent'],cwd=ROOT,check=True)

@@ -1,0 +1,22 @@
+spec:
+  template:
+    metadata:
+      annotations:
+        auth.demo.dev/routing: ${GATEWAYS_JSON}
+    spec:
+      volumes:
+      - name: agent-egress-gateways
+        configMap:
+          name: agent-egress-gateways
+      containers:
+      - name: ate-api-server
+        image: ${SUBSTRATE_API_IMAGE}
+        securityContext:
+          runAsUser: 0
+        env:
+        - name: AGENT_EGRESS_GATEWAYS_FILE
+          value: /etc/agent-egress/gateways.json
+        volumeMounts:
+        - name: agent-egress-gateways
+          mountPath: /etc/agent-egress
+          readOnly: true

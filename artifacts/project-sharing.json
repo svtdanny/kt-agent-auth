@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-10-27T14:37:38.589652+00:00",
+  "projectNamespace": "auth-agent-a",
+  "workerPools": 1,
+  "workerPods": 1,
+  "proxyDeployments": 1,
+  "otherProjectRejected": true,
+  "agents": [
+    {
+      "agent": "mastra-http",
+      "bindingPreserved": true,
+      "internal": 200,
+      "external": 200,
+      "deniedOperation": 403
+    },
+    {
+      "agent": "mastra-second",
+      "bindingPreserved": true,
+      "internal": 200,
+      "external": 200,
+      "deniedOperation": 403
+    }
+  ]
+}

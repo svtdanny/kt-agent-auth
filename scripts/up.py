@@ -51,8 +51,8 @@ def main():
     if not checksum.exists():run('curl','-fLsS','--retry','3',url+'.sha256','-o',str(checksum))
     if hashlib.sha256(binary.read_bytes()).hexdigest()!=checksum.read_text().split()[0]:raise SystemExit('kagent binary checksum mismatch')
     config={'install':{'defaultModelProvider':'Ollama',
-        'kagent':{'version':VERSION,'valuesFiles':[str(ROOT/'deploy/kagent-values.yaml')]},
-        'substrate':{'version':'0.6.0-alpha3','valuesFiles':[str(ROOT/'deploy/substrate-values.yaml')]}}}
+        'kagent':{'version':VERSION,'valuesFiles':[str(ROOT/'k8s/cluster/kagent-values.yaml')]},
+        'substrate':{'version':'0.6.0-alpha3','valuesFiles':[str(ROOT/'k8s/cluster/substrate-values.yaml'),str(ROOT/'k8s/cluster/local/minikube-values.yaml')]}}}
     (CACHE/'install.yaml').write_text(yaml.safe_dump(config))
     for attempt in range(3):
         try:

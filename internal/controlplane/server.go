@@ -41,7 +41,6 @@ type Server struct {
 	Kagent           apiv1.SessionServiceClient
 	A2A              a2apb.A2AServiceClient
 	Namespace        string
-	AgentName        string
 	TokenPath        string
 	Objects          ObjectState
 	Credentials      credential.Provider
@@ -183,7 +182,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		reject(w, 400, err)
 		return
 	}
-	if in.Agent.Namespace != s.Namespace || (s.AgentName != "" && in.Agent.Name != s.AgentName) || in.Agent.Name == "" || in.ServiceAccount == "" || in.RequestID == "" {
+	if in.Agent.Namespace != s.Namespace || in.Agent.Name == "" || in.ServiceAccount == "" || in.RequestID == "" {
 		reject(w, 400, fmt.Errorf("agent, account and requestId in the demo namespace are required"))
 		return
 	}
@@ -222,7 +221,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Scope upstream idempotency by authenticated caller, never by a caller-supplied user header.
-	key := fmt.Sprintf("auth-demo-%x", sha256.Sum256([]byte(s.Namespace+"/"+s.AgentName+"\x00"+u.Username+"\x00"+in.RequestID)))
+	key := fmt.Sprintf("auth-demo-%x", sha256.Sum256([]byte(in.Agent.String()+"\x00"+u.Username+"\x00"+in.RequestID)))
 	created, err := s.Kagent.CreateSession(ctx, &apiv1.CreateSessionRequest{Agent: &apiv1.ResourceReference{Namespace: in.Agent.Namespace, Name: in.Agent.Name}, RequestId: key})
 	if err != nil {
 		reject(w, 503, err)
@@ -245,7 +244,7 @@ func (s *Server) owned(r *http.Request) (api.Binding, error) {
 	if err != nil {
 		return b, err
 	}
-	if b.User != u.Username || b.Agent.Namespace != s.Namespace || (s.AgentName != "" && b.Agent.Name != s.AgentName) {
+	if b.User != u.Username || b.Agent.Namespace != s.Namespace {
 		return b, fmt.Errorf("session is not owned by caller")
 	}
 	return b, nil
@@ -319,7 +318,7 @@ func (s *Server) resolve(ctx context.Context, id string) (api.SessionContext, er
 	if err != nil {
 		return api.SessionContext{}, err
 	}
-	if !b.Active || b.Atespace != ns || b.Agent.Namespace != ns || ns != s.Namespace || (s.AgentName != "" && b.Agent.Name != s.AgentName) {
+	if !b.Active || b.Atespace != ns || b.Agent.Namespace != ns || ns != s.Namespace {
 		return api.SessionContext{}, fmt.Errorf("inactive or mismatched session binding")
 	}
 	// Native Session identity was established at CreateSession. Egress uses

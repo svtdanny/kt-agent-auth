@@ -1,4 +1,4 @@
-// Package credential resolves credentials mounted only into one agent's authorizer.
+// Package credential resolves credentials mounted only into one project's authorizer.
 package credential
 
 import (
@@ -37,22 +37,22 @@ type token struct {
 	expires time.Time
 }
 type Mounted struct {
-	Namespace, Agent, File string
-	HTTP                   *http.Client
-	mu                     sync.Mutex
-	digest                 [32]byte
-	entries                map[string]Entry
-	generation             uint64
-	tokens                 map[string]token
-	loads                  singleflight.Group
-	reads, hits, exchanges atomic.Uint64
+	Namespace, Project, File string
+	HTTP                     *http.Client
+	mu                       sync.Mutex
+	digest                   [32]byte
+	entries                  map[string]Entry
+	generation               uint64
+	tokens                   map[string]token
+	loads                    singleflight.Group
+	reads, hits, exchanges   atomic.Uint64
 }
 
-func NewMounted(namespace, agent, file string) (*Mounted, error) {
-	if namespace == "" || agent == "" || file == "" {
-		return nil, fmt.Errorf("credential namespace, agent and mounted file are required")
+func NewMounted(namespace, project, file string) (*Mounted, error) {
+	if namespace == "" || project == "" || file == "" {
+		return nil, fmt.Errorf("credential namespace, project and mounted file are required")
 	}
-	m := &Mounted{Namespace: namespace, Agent: agent, File: file, HTTP: &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("credential endpoint redirect denied") }}, tokens: map[string]token{}}
+	m := &Mounted{Namespace: namespace, Project: project, File: file, HTTP: &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("credential endpoint redirect denied") }}, tokens: map[string]token{}}
 	if err := m.reload(); err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (m *Mounted) reload() error {
 }
 func (m *Mounted) Read(ctx context.Context, ns, name string) (string, error) {
 	if ns != m.Namespace {
-		return "", fmt.Errorf("credential belongs to another agent scope")
+		return "", fmt.Errorf("credential belongs to another project scope")
 	}
 	if err := m.reload(); err != nil {
 		return "", err
@@ -122,7 +122,7 @@ func (m *Mounted) Read(ctx context.Context, ns, name string) (string, error) {
 	generation := m.generation
 	if !ok {
 		m.mu.Unlock()
-		return "", fmt.Errorf("credential reference is not mounted for this agent")
+		return "", fmt.Errorf("credential reference is not mounted for this project")
 	}
 	if entry.Type == "bearer" {
 		m.mu.Unlock()
@@ -135,7 +135,7 @@ func (m *Mounted) Read(ctx context.Context, ns, name string) (string, error) {
 		return t.value, nil
 	}
 	m.mu.Unlock()
-	key := fmt.Sprintf("%s/%s/%s/%d", m.Namespace, m.Agent, name, generation)
+	key := fmt.Sprintf("%s/%s/%s/%d", m.Namespace, m.Project, name, generation)
 	ch := m.loads.DoChan(key, func() (any, error) {
 		m.mu.Lock()
 		if generation != m.generation {
@@ -208,7 +208,7 @@ func (m *Mounted) Read(ctx context.Context, ns, name string) (string, error) {
 }
 func (m *Mounted) Invalidate(ns, name string) error {
 	if ns != m.Namespace {
-		return fmt.Errorf("credential belongs to another agent scope")
+		return fmt.Errorf("credential belongs to another project scope")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

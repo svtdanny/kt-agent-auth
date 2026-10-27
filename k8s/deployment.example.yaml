@@ -1,0 +1,18 @@
+NAMESPACE: project-a
+AGENT: mastra-http
+CALLER: agent-client
+WORKER_POOL: project-workers
+SUBSTRATE_NAMESPACE: ate-system
+KAGENT_NAMESPACE: kagent
+CLUSTER_DOMAIN: cluster.local
+AUTHORIZER_IMAGE: registry.example.com/agent-auth/authorizer:REPLACE
+ATENET_IMAGE: registry.example.com/agent-auth/substrate-atenet:REPLACE
+SUBSTRATE_API_IMAGE: registry.example.com/agent-auth/substrate-api:REPLACE
+ENVOY_IMAGE: envoyproxy/envoy:v1.38.6
+AGENT_IMAGE: registry.example.com/team/agent@sha256:REPLACE_WITH_64_HEX_DIGEST
+INTERNAL_ORIGIN: http://internal-mcp.test-services.svc.cluster.local:8080
+EXTERNAL_ORIGIN: https://api.example.com
+SNAPSHOT_ROOT: s3://ate-snapshots
+TRUST_BUNDLE_FILE: /etc/ssl/certs/ca-certificates.crt
+GATEWAYS:
+  project-a: agent-egress.project-a.svc:443

@@ -19,7 +19,7 @@ class BundleTests(unittest.TestCase):
   address=cluster['load_assignment']['endpoints'][0]['lb_endpoints'][0]['endpoint']['address']['socket_address'];self.assertEqual(address,{'address':'127.0.0.1','port_value':50052})
  def test_scope_and_credentials_file_are_explicit(self):
   auth=next(x for x in self.find('Deployment','agent-egress')['spec']['template']['spec']['containers'] if x['name']=='authorizer');env={v['name']:v.get('value') for v in auth['env']}
-  self.assertEqual(env['AGENT_NAME'],'mastra-http');self.assertEqual(env['DEMO_NAMESPACE'],'agent-a');self.assertEqual(env['CREDENTIALS_FILE'],'/credentials/credentials.json')
+  self.assertNotIn('AGENT_NAME',env);self.assertEqual(env['PROJECT_NAMESPACE'],'agent-a');self.assertEqual(env['CREDENTIALS_FILE'],'/credentials/credentials.json')
  def test_mtls_is_required_for_local_processor(self):
   cluster=next(x for x in bootstrap()['static_resources']['clusters'] if x['name']=='agent_authorizer');tls=cluster['transport_socket']['typed_config'];self.assertEqual(tls['sni'],'authorizer');self.assertIn('tls_certificates',tls['common_tls_context'])
  def test_platform_fqdn_bypasses_only_custom_processor(self):

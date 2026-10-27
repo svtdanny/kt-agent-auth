@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-caller
+  namespace: ${NAMESPACE}
+  labels:
+    auth.demo.dev/managed: 'true'
+  annotations:
+    auth.demo.dev/policy-ref: agent-permissions
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-permissions
+  namespace: ${NAMESPACE}
+  labels:
+    auth.demo.dev/managed: 'true'
+data:
+  type: permission-set/v1
+  config: "{\n  \"permissions\": [\n    {\n      \"id\": \"internal\",\n      \"type\"\
+    : \"http-request/v1\",\n      \"config\": {\n        \"origin\": \"${INTERNAL_ORIGIN}\"\
+    ,\n        \"methods\": [\n          \"GET\"\n        ],\n        \"paths\": [\n\
+    \          \"/catalog\",\n          \"/mcp\"\n        ],\n        \"credential\"\
+    : \"api-token\"\n      }\n    },\n    {\n      \"id\": \"external\",\n      \"\
+    type\": \"http-request/v1\",\n      \"config\": {\n        \"origin\": \"${EXTERNAL_ORIGIN}\"\
+    ,\n        \"methods\": [\n          \"GET\"\n        ],\n        \"paths\": [\n\
+    \          \"/external\"\n        ],\n        \"credential\": \"api-token\"\n\
+    \      }\n    }\n  ]\n}"

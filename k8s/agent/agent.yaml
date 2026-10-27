@@ -1,0 +1,13 @@
+apiVersion: api.kagent.dev/v1alpha3
+kind: Agent
+metadata:
+  name: ${AGENT}
+  namespace: ${NAMESPACE}
+spec:
+  template:
+    inline:
+      description: Mastra agent using project authorization
+  harnessRef:
+    name: ${AGENT}-harness
+  egressPolicyRefs:
+  - name: transport

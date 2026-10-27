@@ -1,0 +1,23 @@
+apiVersion: ate.dev/v1alpha1
+kind: WorkerPool
+metadata:
+  name: ${WORKER_POOL}
+  namespace: ${NAMESPACE}
+  labels:
+    kagent.dev/worker-pool-name: ${WORKER_POOL}
+    kagent.dev/worker-pool-namespace: ${NAMESPACE}
+spec:
+  replicas: 1
+  sandboxClasses:
+  - name: gvisor
+    configRef:
+      name: gvisor-default
+  workerImage: ghcr.io/kagent-dev/substrate/ateworker-gvisor:v0.6.0-alpha3
+  template:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: '2'
+        memory: 2Gi

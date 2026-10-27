@@ -38,16 +38,15 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	ns := env("DEMO_NAMESPACE", "demo")
+	ns := os.Getenv("PROJECT_NAMESPACE")
+	if ns == "" {
+		log.Fatal("PROJECT_NAMESPACE is required")
+	}
 	objects := controlplane.NewWatchedState(k, ns)
 	if err = objects.Start(ctx); err != nil {
 		log.Fatal(err)
 	}
-	agent := os.Getenv("AGENT_NAME")
-	if agent == "" {
-		log.Fatal("AGENT_NAME is required")
-	}
-	provider, err := credential.NewMounted(ns, agent, os.Getenv("CREDENTIALS_FILE"))
+	provider, err := credential.NewMounted(ns, ns, os.Getenv("CREDENTIALS_FILE"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,7 +54,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.AgentName = agent
 	s.GCInterval = duration("SESSION_GC_INTERVAL", 5*time.Minute)
 	s.BindingRetention = duration("BINDING_RETENTION", 24*time.Hour)
 	s.RequestRetention = duration("REQUEST_ID_RETENTION", 7*24*time.Hour)

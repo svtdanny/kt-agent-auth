@@ -1,0 +1,9 @@
+apiVersion: api.kagent.dev/v1alpha3
+kind: EgressPolicy
+metadata:
+  name: transport
+  namespace: ${NAMESPACE}
+spec:
+  destinations:
+  - origin: ${INTERNAL_ORIGIN}
+  - origin: ${EXTERNAL_ORIGIN}

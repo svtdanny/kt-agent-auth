@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-egress-gateways
+  namespace: ${SUBSTRATE_NAMESPACE}
+data:
+  gateways.json: ${GATEWAYS_JSON}

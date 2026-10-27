@@ -12,13 +12,13 @@ deploy-agent-credentials:
       file: true
   script:
     - >-
-      kubectl --context "$KUBE_CONTEXT" --namespace "$AGENT_NAMESPACE"
+      kubectl --context "$KUBE_CONTEXT" --namespace "$PROJECT_NAMESPACE"
       create secret generic application-credentials
       --from-file=credentials.json="$AGENT_CREDENTIALS_JSON"
       --dry-run=client -o json |
-      kubectl --context "$KUBE_CONTEXT" --namespace "$AGENT_NAMESPACE" apply -f -
+      kubectl --context "$KUBE_CONTEXT" --namespace "$PROJECT_NAMESPACE" apply -f -
     # Apply the project policy ConfigMap, ServiceAccount policy reference, and
     # dedicated bundle with your deployment tooling. Platform-owned resources
     # (routing assignments, trust/signers, reviewer binding) are provisioned separately.
   environment:
-    name: $AGENT_NAMESPACE
+    name: $PROJECT_NAMESPACE

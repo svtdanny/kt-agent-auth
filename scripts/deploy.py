@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Local dedicated-agent pilot on an already installed pinned kagent/Substrate cluster."""
+"""Local project authorization pilot on an already installed pinned kagent/Substrate cluster."""
 import base64,json,os,secrets,subprocess,time
 from pathlib import Path
 from urllib.parse import quote
 from local import ROOT,CACHE,ENV,kubectl,apply
-from dedicated_gateway import bundle,obj
+from dedicated_gateway import bundle,obj,demo_config,resources,api_patch
 SCOPES=['auth-agent-a','auth-agent-b']
 AGENT='mastra-http'
 INTERNAL='http://internal-mcp.test-services.svc.cluster.local:8080'
@@ -99,13 +99,10 @@ def install_fixture(d,k):
 
 def install_routing():
     assignments={ns:f'agent-egress.{ns}.svc:443' for ns in SCOPES}
-    apply([obj('ConfigMap','agent-egress-gateways','ate-system',data={'gateways.json':json.dumps(assignments)})])
     digest=next(x for x in json.loads(run(['docker','inspect','localhost:5001/auth-demo/substrate-api:dedicated']))[0]['RepoDigests'] if x.startswith('localhost:5001/'))
-    patch={'spec':{'template':{'metadata':{'annotations':{'auth.demo.dev/routing':json.dumps(assignments,sort_keys=True)}},'spec':{'volumes':[{'name':'agent-egress-gateways','configMap':{'name':'agent-egress-gateways'}}],
-      'containers':[{'name':'ate-api-server','image':digest,'securityContext':{'runAsUser':0},
-        'env':[{'name':'AGENT_EGRESS_GATEWAYS_FILE','value':'/etc/agent-egress/gateways.json'}],
-        'volumeMounts':[{'name':'agent-egress-gateways','mountPath':'/etc/agent-egress','readOnly':True}]}]}}}}
-    kubectl('-n','ate-system','patch','deploy','ate-api-server','--type=strategic','-p',json.dumps(patch))
+    values=demo_config(SCOPES[0],GATEWAYS=assignments,SUBSTRATE_API_IMAGE=digest)
+    apply(resources('cluster',values))
+    kubectl('-n','ate-system','patch','deploy','ate-api-server','--type=strategic','-p',json.dumps(api_patch(values)))
     kubectl('-n','ate-system','rollout','status','deploy/ate-api-server','--timeout=240s')
 
 def main():
@@ -138,25 +135,20 @@ def main():
         copies.extend([tls_secret(ns,'authorizer-tls','authorizer',certificates(ns)),tls_secret(ns,'auth-client','auth-egress',certificates(ns)),
            obj('Secret','application-credentials',ns,stringData={'credentials.json':json.dumps({'api-token':{'type':'bearer','token':k['reader' if ns==SCOPES[0] else 'writer']}})})])
         apply(copies)
-        resources=bundle(ns,AGENT,'localhost:5001/auth-demo/authorizer:dedicated',(d/'ca.crt').read_text())
-        resources += [obj('ConfigMap','agent-permissions',ns,data={'type':'permission-set/v1','config':json.dumps(policy(ns,ns==SCOPES[1]))}),
-          obj('ServiceAccount','agent-caller',ns,automountServiceAccountToken=False),obj('ServiceAccount','test-user',ns),
-          obj('Role','select-agent-account',ns,rules=[{'apiGroups':[''],'resources':['serviceaccounts'],'resourceNames':['agent-caller'],'verbs':['use']}]),
-          obj('RoleBinding','select-agent-account',ns,subjects=[{'kind':'ServiceAccount','name':'test-user','namespace':ns}],roleRef={'apiGroup':'rbac.authorization.k8s.io','kind':'Role','name':'select-agent-account'})]
-        for x in resources:
-            if x['kind']=='ConfigMap' and x['metadata']['name']=='agent-permissions':x['metadata']['labels']={'auth.demo.dev/managed':'true'}
-            if x['kind']=='ServiceAccount' and x['metadata']['name']=='agent-caller':
-                x['metadata'].update(labels={'auth.demo.dev/managed':'true'},annotations={'auth.demo.dev/policy-ref':'agent-permissions'})
+        objects=bundle(ns,AGENT,'localhost:5001/auth-demo/authorizer:dedicated',(d/'ca.crt').read_text())
+        for resource in objects:
+            if resource['kind']=='ConfigMap' and resource['metadata']['name']=='agent-permissions':
+                resource['data']['config']=json.dumps(policy(ns,ns==SCOPES[1]))
         # Immutable image digests and config hashes make repeated deploys deterministic.
         import hashlib
-        for resource in resources:
+        for resource in objects:
             if resource['kind']=='Deployment':
                 spec=resource['spec']['template']['spec']
                 for container in spec['containers']+spec.get('initContainers',[]):
                     if container['image'].startswith('localhost:5001/'):
                         container['image']=next(x for x in json.loads(run(['docker','inspect',container['image']]))[0]['RepoDigests'] if x.startswith('localhost:5001/'))
-                resource['spec']['template']['metadata']['annotations']={'auth.demo.dev/config-hash':hashlib.sha256(json.dumps([x for x in resources if x['kind']=='ConfigMap'],sort_keys=True).encode()).hexdigest(), 'auth.demo.dev/tls-hash':hashlib.sha256((certificates(ns)/'authorizer.crt').read_bytes()+(certificates(ns)/'auth-egress.crt').read_bytes()).hexdigest()}
-        apply(resources)
+                resource['spec']['template']['metadata']['annotations']={'auth.demo.dev/config-hash':hashlib.sha256(json.dumps([x for x in objects if x['kind']=='ConfigMap'],sort_keys=True).encode()).hexdigest(), 'auth.demo.dev/tls-hash':hashlib.sha256((certificates(ns)/'authorizer.crt').read_bytes()+(certificates(ns)/'auth-egress.crt').read_bytes()).hexdigest()}
+        apply(objects)
     install_routing();install_fixture(d,k)
     # Reuse the already built, immutable Mastra BYO image, or the image built by build.py.
     image=os.environ.get('MASTRA_IMAGE')
@@ -164,19 +156,13 @@ def main():
         digests=json.loads(run(['docker','inspect','localhost:5001/auth-demo/mastra:dedicated']))[0]['RepoDigests']
         image=next(x for x in digests if x.startswith('localhost:5001/'))
     for ns in SCOPES:
-        resources=[{'apiVersion':'ate.dev/v1alpha1','kind':'WorkerPool','metadata':{'name':'agent-workers','namespace':ns,'labels':{'kagent.dev/worker-pool-name':'agent-workers','kagent.dev/worker-pool-namespace':ns}},'spec':{
-          'replicas':1,'sandboxClasses':[{'name':'gvisor','configRef':{'name':'gvisor-default'}}],'workerImage':'ghcr.io/kagent-dev/substrate/ateworker-gvisor:v0.6.0-alpha3',
-          'template':{'resources':{'requests':{'cpu':'100m','memory':'256Mi'},'limits':{'cpu':'2','memory':'2Gi'}}}}},
-          {'apiVersion':'api.kagent.dev/v1alpha3','kind':'Harness','metadata':{'namespace':ns,'name':'mastra'},'spec':{'byo':{},'workload':{'image':image,'command':['/app/adapter']},
-              'env':[{'name':'DEMO_API_ORIGIN','value':INTERNAL}],'substrate':{'workerPoolRef':{'name':'agent-workers'},'snapshotPolicy':{'location':'s3://ate-snapshots/'+ns+'/'}}}},
-          {'apiVersion':'api.kagent.dev/v1alpha3','kind':'EgressPolicy','metadata':{'namespace':ns,'name':'transport'},'spec':{'destinations':[{'origin':INTERNAL},{'origin':EXTERNAL}]}},
-          {'apiVersion':'api.kagent.dev/v1alpha3','kind':'Agent','metadata':{'namespace':ns,'name':AGENT},'spec':{'template':{'inline':{'description':'Dedicated authorization pilot'}},'harnessRef':{'name':'mastra'},'egressPolicyRefs':[{'name':'transport'}]}}]
-        apply(resources)
-        kubectl('-n',ns,'rollout','status','deploy/agent-egress','--timeout=240s')
-        for _ in range(150):
-            status=json.loads(kubectl('-n',ns,'get','agent',AGENT,'-o','json')).get('status',{})
-            if any(c['type']=='Ready' and c['status']=='True' for c in status.get('conditions',[])) and status.get('workloadImage')==image and status.get('desiredRevision')==status.get('latestSuccessfulRevision'):break
-            time.sleep(2)
-        else:raise RuntimeError('Agent preparation did not finish: '+ns)
-    print('Dedicated agent deployments ready: '+', '.join(SCOPES))
+        for agent in ([AGENT,'mastra-second'] if ns==SCOPES[0] else [AGENT]):
+            apply(resources('agent',demo_config(ns,agent,AGENT_IMAGE=image)))
+            kubectl('-n',ns,'rollout','status','deploy/agent-egress','--timeout=240s')
+            for _ in range(150):
+                status=json.loads(kubectl('-n',ns,'get','agent',agent,'-o','json')).get('status',{})
+                if any(c['type']=='Ready' and c['status']=='True' for c in status.get('conditions',[])) and status.get('workloadImage')==image and status.get('desiredRevision')==status.get('latestSuccessfulRevision'):break
+                time.sleep(2)
+            else:raise RuntimeError('Agent preparation did not finish: '+ns)
+    print('Project proxy deployments ready: '+', '.join(SCOPES))
 if __name__=='__main__':main()

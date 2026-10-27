@@ -1,0 +1,10 @@
+ateApi:
+  extraArgs:
+  - --postgres-pool-max-conns=8
+otel:
+  traces:
+    enabled: false
+  metrics:
+    enabled: false
+  logs:
+    enabled: false

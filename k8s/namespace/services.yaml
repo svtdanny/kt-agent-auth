@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-egress
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: agent-egress
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8443
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authorizer
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: agent-egress
+  ports:
+  - port: 8443
+    targetPort: 8444

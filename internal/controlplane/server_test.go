@@ -104,7 +104,7 @@ func fixture(t *testing.T) (*Server, *fake.Clientset, *sessions) {
 		t.Fatal(err)
 	}
 	up := &sessions{}
-	return &Server{Kube: k, Store: newMemoryStore(), Kagent: up, Namespace: "demo", AgentName: "mastra-http", TokenPath: token, Objects: objects, Credentials: &testCredentials{value: "test-secret"}, GCInterval: 5 * time.Minute, BindingRetention: 24 * time.Hour, RequestRetention: 7 * 24 * time.Hour}, k, up
+	return &Server{Kube: k, Store: newMemoryStore(), Kagent: up, Namespace: "demo", TokenPath: token, Objects: objects, Credentials: &testCredentials{value: "test-secret"}, GCInterval: 5 * time.Minute, BindingRetention: 24 * time.Hour, RequestRetention: 7 * 24 * time.Hour}, k, up
 }
 func call(t *testing.T, s *Server, path string, input any, client bool) *httptest.ResponseRecorder {
 	t.Helper()

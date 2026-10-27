@@ -1,9 +1,7 @@
-# Dedicated agent pilot
+# Project deployment bundles
 
-Implemented direction: one namespace per deployed Agent, dedicated Envoy + sdsmint + native authorizer + combined custom authorizer. ConfigMap policies are watched; GitLab/Vault credentials are mounted only into the custom authorizer. PostgreSQL persists immutable Session/ServiceAccount UID bindings.
+One GitLab project maps to one namespace, one shared WorkerPool and one dedicated Envoy/native authorization/sdsmint/combined authorizer bundle. Agents in the project reuse this infrastructure. Session → Agent → ServiceAccount UID bindings remain immutable in PostgreSQL; project credentials are mounted only into its authorizer.
 
-The pinned Substrate API needs the tracked routing overlay. kagent, workers and atunnel remain unchanged. The old shared proxy, custom Pod enrollment, direct Vault client and separate processor/control-plane RPC are removed.
+Canonical YAML and deployment instructions are in k8s/cluster, k8s/namespace and k8s/agent. The local installer reads the same sources. The existing Substrate namespace routing overlay is unchanged; kagent and worker binaries remain unchanged.
 
-Validation: Go tests/race/vet, manifest validation, real Minikube native Sessions to internal HTTP MCP and external HTTPS, permission updates, Secret rotation, isolation, restart persistence, bounded load and SQL integration. Current results are recorded in artifacts/dedicated-*.json when tests complete.
-
-Deferred: approval UI, generic TCP/PostgreSQL adapters, multiple deployed Agents in one namespace, production CNI/HA testing and a portable Helm release.
+Verify Go tests/race/vet, bundle rendering, internal/external HTTP rules and two real Agents sharing one project pool/proxy. Production readiness, availability and release packaging requirements remain in docs/devops-production-task.md.

@@ -1,0 +1,19 @@
+apiVersion: api.kagent.dev/v1alpha3
+kind: Harness
+metadata:
+  name: ${AGENT}-harness
+  namespace: ${NAMESPACE}
+spec:
+  byo: {}
+  workload:
+    image: ${AGENT_IMAGE}
+    command:
+    - /app/adapter
+  env:
+  - name: DEMO_API_ORIGIN
+    value: ${INTERNAL_ORIGIN}
+  substrate:
+    workerPoolRef:
+      name: ${WORKER_POOL}
+    snapshotPolicy:
+      location: ${SNAPSHOT_ROOT}/${NAMESPACE}/${AGENT}/

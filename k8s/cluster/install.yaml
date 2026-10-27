@@ -1,0 +1,10 @@
+install:
+  defaultModelProvider: Ollama
+  kagent:
+    version: 1.0.0-alpha17
+    valuesFiles:
+    - k8s/cluster/kagent-values.yaml
+  substrate:
+    version: 0.6.0-alpha3
+    valuesFiles:
+    - k8s/cluster/substrate-values.yaml

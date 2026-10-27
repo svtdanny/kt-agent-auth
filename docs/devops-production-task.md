@@ -2,7 +2,7 @@
 
 **Owner:** DevOps / platform team. **Dependencies:** application team release and production readiness work below.
 
-Deploy the tested kagent egress scheme through GitLab: one namespace and one dedicated egress bundle per deployed Agent. Deliver a reusable deployment package, validate it in staging, then promote the same image digests and chart version to production. This task prepares deployment; it does not authorize changes to a production cluster from the local demo scripts.
+Deploy the tested kagent egress scheme through GitLab: one namespace, shared WorkerPool and dedicated egress bundle per GitLab project. Deliver a reusable deployment package, validate it in staging, then promote the same image digests and chart version to production. This task prepares deployment; it does not authorize changes to a production cluster from the local demo scripts.
 
 ## Target architecture and scope
 
@@ -20,9 +20,9 @@ flowchart LR
     Z <--> DB[("Existing PostgreSQL server")]
 ```
 
-Envoy, the native authorization helper and our combined authorizer share one Pod; sdsmint is a native sidecar in that Pod. Each Agent gets its own bundle, application Secret, local mTLS trust boundary and database login. Only the custom authorizer mounts application credentials. Internal MCP and external HTTP(S) use the same filtering path.
+Envoy, the native authorization helper and our combined authorizer share one Pod; sdsmint is a native sidecar in that Pod. Each project gets its own bundle, application Secret, local mTLS trust boundary and database login. Only the custom authorizer mounts application credentials. Internal MCP and external HTTP(S) use the same filtering path.
 
-Keep kagent, worker binaries and atunnel unchanged. Build Substrate API with the tracked [routing overlay](../upstream/substrate.patch), which selects a gateway by Actor namespace and registers exact gateway SPIFFE principals. The current selector supports **one deployed Agent per namespace**. An individual Session may have multiple permission grants through its bound ServiceAccount policy.
+Keep kagent, worker binaries and atunnel unchanged. Build Substrate API with the tracked [routing overlay](../upstream/substrate.patch), which selects a gateway by Actor namespace and registers exact gateway SPIFFE principals. The current selector supports **one project per namespace, with multiple Agents sharing its WorkerPool and gateway**. An individual Session may have multiple permission grants through its bound ServiceAccount policy.
 
 Changes apply to enrolled agent namespaces. Preserve other workloads and the platform default gateway. No cluster-wide traffic restrictions, MCP ingress restrictions, service mesh, custom Pod branch, approval UI or PostgreSQL protocol adapter are included. The current custom processor filters HTTP request headers, destinations, methods and paths.
 
@@ -37,7 +37,7 @@ Fill these deployment inputs before rendering the release:
 | Runtime/storage | Supported SandboxConfig, worker capacity, registry access and native snapshot object-store endpoint/prefix |
 | Artifact references | Reviewed Git commit, chart version and registry image digests |
 | Credentials | Project Vault JWT role, audience, permitted KV paths and CI deployment identity |
-| Database | Existing PostgreSQL endpoint, per-agent database/login, CA, backup and restore ownership |
+| Database | Existing PostgreSQL endpoint, per-project database/login, CA, backup and restore ownership |
 | Certificates | Signers, trust bundles, per-bundle client/server issuers, rotation ownership |
 | Capacity | Agent/session count, expected concurrent HTTP requests, latency/error targets, availability and recovery targets |
 
@@ -46,7 +46,7 @@ The tested versions are kagent `1.0.0-alpha17`, Substrate `0.6.0-alpha3` and Env
 Application team dependencies:
 
 - Review and tag the refactor, then publish immutable images tied to the release commit. Deploy by recorded digests.
-- Replace the Minikube-specific installer with a portable release interface. The [bundle renderer](../scripts/dedicated_gateway.py) and [local deployment script](../scripts/deploy.py) are implementation references. Registry addresses, namespace names, platform DNS, trust roots and images need release values; local Docker/Minikube and PostgreSQL Pod-exec provisioning are excluded from production delivery.
+- Replace the Minikube-specific installer with a portable release interface. The [YAML bundles and renderer](../k8s/README.md) are the release inputs; the [local deployment script](../scripts/deploy.py) consumes those same sources. Registry addresses, namespace names, platform DNS, trust roots and images need release values; local Docker/Minikube and PostgreSQL Pod-exec provisioning are excluded from production delivery.
 - Provide health checks that verify the authorizer's processing service and database usability. Its current `/readyz` returns a static success after startup; Envoy readiness alone does not prove authorization works.
 - Confirm the caller authentication contract. The current bridge uses Kubernetes TokenReview with hardcoded audience `auth-demo`, then SubjectAccessReview for `use` on the selected ServiceAccount. Configure this audience in code if production requires another value. Corporate OIDC login is not implemented by this endpoint.
 - Confirm the target environment permits the current plaintext gRPC hop to kagent. Client TLS support requires application work if that hop must use TLS.
@@ -59,12 +59,12 @@ Application team dependencies:
 
 Verify target Kubernetes support for PodCertificate projection/signing, ClusterTrustBundle projection, native sidecars, and the pinned kagent/Substrate CRDs. Preserve upstream worker capture and native authorization. The local runtime was gVisor; validate capture and suspend/resume on the selected production runtime. Configure the Harness snapshot location and access to the platform object store so native suspension/restoration works. Keep snapshot prefixes scoped to the deployed Agent. The local rebuilt API retained the upstream runtime UID needed to access its object-store sidecar socket; verify socket ownership when applying the production security context.
 
-**2. Provision the following resources.** Cluster-scoped bindings and platform configuration belong to the platform pipeline; project pipelines deploy their permitted namespace resources.
+**2. Provision the following resources.** Cluster-scoped bindings and platform configuration belong to the platform pipeline; project pipelines deploy their permitted namespace resources. Canonical YAML is organized into [cluster, namespace and agent bundles](../k8s/README.md).
 
 | Scope | Resources and purpose |
 | --- | --- |
 | Platform | Patched Substrate API image; protected cumulative namespace → gateway ConfigMap; exact gateway principals; existing signers and trust infrastructure |
-| Per Agent | Namespace; `agent-egress` ServiceAccount; Role/RoleBinding to get/list/watch ServiceAccounts and ConfigMaps |
+| Per project | Namespace; `agent-egress` ServiceAccount; Role/RoleBinding to get/list/watch ServiceAccounts and ConfigMaps |
 | Caller selection | Managed identity ServiceAccounts with policy references; `use` Role/RoleBinding for explicitly permitted callers |
 | Reviewer access | TokenReview and SubjectAccessReview ClusterRole plus binding to the authorizer's ServiceAccount |
 | Egress | Dedicated Deployment, Envoy/SDS ConfigMaps, upstream trust, gateway and authorizer ClusterIP Services |
@@ -91,11 +91,11 @@ Keep the processor and Envoy administrative interfaces private. If Session manag
 
 Preserve the tested local mTLS identities: gateway client CN `auth-egress`, authorizer server SAN `authorizer`, and operations client CN `ext-proc`. Use separate client trust roots per bundle. Application credential rotation uses the projected file; local mTLS and database settings are loaded at process startup and require a controlled replacement on rotation. Preserve the upstream certificate renewal/SDS mechanisms separately.
 
-**4. Implement GitLab → Vault → Secret delivery.** Use the [GitLab example](../deploy/gitlab-ci.example.yml) as a starting point. Configure project-scoped Vault OIDC/JWT access and deploy only secrets authorized for that project. The chart references existing Secrets; credential values must not enter chart values, repository files, CI logs or retained artifacts.
+**4. Implement GitLab → Vault → Secret delivery.** Use the [GitLab example](../k8s/namespace/gitlab-ci.example.yml) as a starting point. Configure project-scoped Vault OIDC/JWT access and deploy only secrets authorized for that project. The chart references existing Secrets; credential values must not enter chart values, repository files, CI logs or retained artifacts.
 
 Mount one `credentials.json` document as a directory projection only into the custom authorizer, without `subPath`. The existing resolvers support static bearer credentials and OAuth client credentials. References in policies select entries in that document. Runtime authorizers require no direct Vault connection or Kubernetes Secret-read API rights. A Vault change reaches runtime only after the CI delivery step updates the Kubernetes Secret; Secret projection then updates eventually, without a polling job.
 
-**5. Provision persistence and operations.** Reuse the existing PostgreSQL server with a separate database/login per agent deployment and its private `auth_bridge` schema. Precreate that schema with the appropriate owner: the application creates/migrates its own tables at startup. Use verified TLS and a dedicated connection budget: the current pool limit is four connections per authorizer replica. Grant no access to kagent's internal tables. Include authorization databases in backup/restore procedures and test restoration of immutable bindings.
+**5. Provision persistence and operations.** Reuse the existing PostgreSQL server with a separate database/login per project and its private `auth_bridge` schema. Precreate that schema with the appropriate owner: the application creates/migrates its own tables at startup. Use verified TLS and a dedicated connection budget: the current pool limit is four connections per authorizer replica. Grant no access to kagent's internal tables. Include authorization databases in backup/restore procedures and test restoration of immutable bindings.
 
 Keep current configurable lifecycle defaults unless the product owner changes them: cleanup every five minutes, revoked bindings for 24 hours, retired request IDs for seven days. Suspended Sessions remain valid. Policy changes use asynchronous ServiceAccount/ConfigMap watches, with coalesced GETs for requested cache misses. Preserve eventual update behavior; introduce no scheduled Kubernetes polling or per-request native Session lookup.
 
@@ -113,11 +113,11 @@ Deploy first to staging with the production Kubernetes/CNI and identity integrat
 
 Acceptance evidence must cover:
 
-- Two Agents with identical credential reference names and different values; no cross-agent Session, credential or internal mTLS access.
+- Two projects with identical credential reference names and different values; no cross-project Session, credential or internal mTLS access. Two Agents within one project must reuse its WorkerPool/proxy and retain independent Session bindings.
 - Real Session creation and retry idempotency; unauthorized caller/account selection rejected; signed Actor identity used instead of caller-supplied identity headers.
 - Internal MCP and external HTTPS success with correctly injected credentials; denied operations, raw-IP/alias bypass attempts and forged headers do not gain access.
 - Multiple grants on one Session; removing one grant preserves the others after watch convergence. No changes to unrelated workloads or MCP ingress behavior.
-- Mounted Secret rotation and OAuth acquisition/refresh against staging authentication; one Agent's rotation leaves the other unaffected. No credential values appear in workload output or operational logs.
+- Mounted Secret rotation and OAuth acquisition/refresh against staging authentication; one project's rotation leaves the other unaffected. No credential values appear in workload output or operational logs.
 - Policy watch recovery and warm requests with no object GETs after synchronization. Existing cached policies remain eventually consistent during watch reconnects; misses/errors must not grant extra access.
 - Unavailable authorizer/native processor, missing credentials and database failure cause no unauthorized forwarding. Recovery restores service without recreating identity mappings.
 - Bundle restart, node replacement and database restore preserve bindings; ServiceAccount UID replacement revokes old bindings after its event arrives. Suspend/resume retains the dedicated route and permissions.

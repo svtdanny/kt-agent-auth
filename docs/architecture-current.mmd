@@ -3,12 +3,12 @@ flowchart TB
         A["Agent sandbox"] -->|"Captured TCP"| T["atunnel"]
     end
     T -->|"mTLS CONNECT / Actor identity"| G
-    subgraph EGRESS["Dedicated egress bundle for Agent A"]
+    subgraph EGRESS["Dedicated egress bundle for Project A"]
         G["Inspecting Envoy"]
         SDS["sdsmint"]
         AUTH["OUR authorizer: ext_proc + control plane"]
         NATIVE["Substrate authorization"]
-        SECRETS["Agent A mounted Secret"]
+        SECRETS["Project A mounted Secret"]
         G <-.->|"Certificate requests"| SDS
         G <-.->|"gRPC request / decision / mutations"| AUTH
         G <-.->|"Native Actor checks"| NATIVE
