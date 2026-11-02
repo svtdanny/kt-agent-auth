@@ -6,6 +6,7 @@ Owner: DevOps/project automation. Apply once per GitLab repository/project. Mult
 | --- | --- |
 | `namespace.yaml` | Project namespace with the upstream API-access integration label |
 | `worker-pool.yaml` | Shared gVisor WorkerPool; configure runtime/capacity here |
+| `autoscaling.yaml` | CPU HPAs for egress (2–3) and WorkerPool (1–2); scale-down disabled for MVP |
 | `egress-deployment.yaml`, `services.yaml` | One project Envoy/native authorizer/combined authorizer/sdsmint bundle and two Services |
 | `authorizer-rbac.yaml` | Project runtime ServiceAccount, watch permissions and reviewer binding |
 | `egress-policy.yaml` | Shared native EgressPolicy for transport origins |
@@ -21,6 +22,7 @@ Before the gateway becomes ready, provision these Secrets in the project namespa
 | Secret | Required keys | Source |
 | --- | --- | --- |
 | `application-credentials` | `credentials.json` | Project Vault paths, delivered by CI |
+| `auth-state-key` | `key` (base64 of 32 random bytes) | Separate project Vault key, delivered by CI; shared by project replicas |
 | `authorizer-db` | `DATABASE_URL` | Dedicated login/database on the existing PostgreSQL server |
 | `authorizer-tls` | `ca.crt`, `tls.crt`, `tls.key` | Per-project local mTLS trust; server SAN `authorizer` |
 | `auth-client` | `ca.crt`, `tls.crt`, `tls.key` | Same project's gateway client certificate, CN `auth-egress` |
@@ -29,7 +31,9 @@ Before the gateway becomes ready, provision these Secrets in the project namespa
 
 Platform PodCertificate and ClusterTrustBundle projections supply the other identities and PostgreSQL trust. Operations clients of `/internal/*` need this project's client trust and CN `ext-proc`. Rotate local mTLS/database settings with a controlled replacement; application Secret projection updates are detected without restart.
 
-Only the custom authorizer mounts `application-credentials`. Do not mount it into workers, Agent images or Envoy. The Secret document supports entries such as `{"api-token":{"type":"bearer","token":"..."}}` and OAuth client credentials; real values belong in Vault/CI, not these YAML files. Create the private `auth_bridge` schema before startup; the authorizer creates its own tables.
+Only the custom authorizer mounts `application-credentials` and `auth-state-key`. Do not mount them into workers, Agent images or Envoy. The credential document supports entries such as `{"api-token":{"type":"bearer","token":"..."}}` and OAuth client credentials; real values belong in Vault/CI, not these YAML files. Create the private `auth_bridge` schema before startup; the authorizer creates its own tables and the private `auth_state` schema. Its database role needs permission to create that schema in its project database. OAuth tokens are encrypted before SQL writes; source credentials and the encryption key remain mounted files. The MVP loads the encryption key at startup and has no automatic key rotation.
+
+Install a Kubernetes resource metrics provider before relying on the HPAs. Once enabled, HPA owns `.spec.replicas`; the YAML replica values are startup defaults. CPU thresholds are initial settings, and the WorkerPool CPU signal does not measure scheduling backlog. Scale-down stays disabled pending separate draining tests.
 
 `EgressPolicy` supplies coarse origins; the ConfigMap supplies complete method/path/destination grants and credential references. Existing Sessions pick up policy updates eventually through watches. No scheduled policy/Secret API polling is added. The shared example ServiceAccount can be selected by Sessions belonging to different Agents in this project. Add further identities/policies when permissions differ; policies may also check the Agent binding.
 

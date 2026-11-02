@@ -1,0 +1,54 @@
+# MVP: CPU-based scale-out only. Validate Actor/tunnel draining before scale-in.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agent-egress
+  namespace: ${NAMESPACE}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agent-egress
+  minReplicas: 2
+  maxReplicas: 3
+  metrics:
+  - type: ContainerResource
+    containerResource:
+      name: cpu
+      container: envoy
+      target:
+        type: AverageValue
+        averageValue: 200m
+  - type: ContainerResource
+    containerResource:
+      name: cpu
+      container: authorizer
+      target:
+        type: AverageValue
+        averageValue: 100m
+  behavior:
+    scaleDown:
+      selectPolicy: Disabled
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agent-workers
+  namespace: ${NAMESPACE}
+spec:
+  scaleTargetRef:
+    apiVersion: ate.dev/v1alpha1
+    kind: WorkerPool
+    name: ${WORKER_POOL}
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: AverageValue
+        averageValue: 500m
+  behavior:
+    scaleDown:
+      selectPolicy: Disabled

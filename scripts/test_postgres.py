@@ -13,8 +13,8 @@ def main():
     sql('DROP DATABASE IF EXISTS auth_bridge_test WITH (FORCE);','postgres')
     sql('CREATE DATABASE auth_bridge_test OWNER auth_bridge_user;','postgres')
     sql('CREATE SCHEMA auth_bridge AUTHORIZATION auth_bridge_user;','auth_bridge_test')
-    for package,binary in [('store','store-tests')]:
-        subprocess.run(['go','test','-c','-race','-o','.cache/build/'+binary,'./internal/'+package],env={**ENV,'CGO_ENABLED':'1'},check=True)
+    for package,binary in [('internal/store','store-tests'),('pkg/authstate','authstate-tests'),('internal/credential','credential-tests')]:
+        subprocess.run(['go','test','-c','-race','-o','.cache/build/'+binary,'./'+package],env={**ENV,'CGO_ENABLED':'1'},check=True)
     subprocess.run(['docker','build','-f','deploy/Dockerfile.sql-tests','-t','localhost:5001/auth-demo/sql-tests:demo','.'],check=True)
     minikube=shutil.which('minikube') or str(ROOT/'.cache/bin/minikube')
     subprocess.run([minikube,'-p','auth-demo','image','load','--daemon','localhost:5001/auth-demo/sql-tests:demo'],check=True)

@@ -8,7 +8,7 @@ TOKEN=re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 FILES={
  'cluster':['reviewer-rbac.yaml','gateway-assignments.yaml'],
  'namespace':['namespace.yaml','authorizer-rbac.yaml','services.yaml','egress-deployment.yaml',
-              'worker-pool.yaml','egress-policy.yaml','permissions.yaml','callers.yaml'],
+              'worker-pool.yaml','egress-policy.yaml','permissions.yaml','callers.yaml','autoscaling.yaml'],
  'agent':['harness.yaml','agent.yaml'],
 }
 def config(path=None,**overrides):

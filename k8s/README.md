@@ -24,7 +24,7 @@ The renderer creates `cluster.yaml`, `namespace.yaml`, `agent.yaml` and `substra
 
 1. Install the platform using [cluster instructions](cluster/README.md).
 2. Render/apply the cluster resources and API patch; wait for every API replica to load the gateway assignments.
-3. Provision project database/certificates, apply the namespace bundle, and deliver its application Secret through GitLab/Vault. Wait for the gateway and WorkerPool to become ready.
+3. Provision project database/certificates and a resource metrics provider, apply the namespace bundle, and deliver its application credentials and auth-state encryption key through GitLab/Vault. Wait for the gateway and WorkerPool to become ready.
 4. Apply the Agent bundle. For another Agent, change only `AGENT` and `AGENT_IMAGE`, render `--bundle agent`, then apply that file. Do not reapply shared namespace resources from an Agent-only pipeline.
 
 ```bash
@@ -40,4 +40,4 @@ kubectl --context CONTEXT apply -f .cache/k8s/agent.yaml
 
 Shared workers are currently shared within a project namespace. The pinned kagent WorkerPool reference is namespace-local. Gateway routing remains the existing Substrate namespace overlay; no new kagent or worker patch is introduced.
 
-Use [the production task](../docs/devops-production-task.md) for readiness, availability and rollout requirements. These bundles preserve the tested single-replica/Recreate baseline; organizing YAML does not establish production HA.
+Use [the production task](../docs/devops-production-task.md) for readiness, availability and rollout requirements. The MVP uses two egress replicas with rolling updates and small CPU-based HPAs. Scale-down and production HA remain unvalidated; see the [scaling test](../scripts/test_scaling.py).

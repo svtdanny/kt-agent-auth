@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/sync/singleflight"
 	"io"
 	"net/http"
 	"net/url"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"example.com/auth-demo/pkg/authstate"
 )
 
 type Provider interface {
@@ -32,19 +33,14 @@ type Entry struct {
 	Scopes        []string `json:"scopes,omitempty"`
 	Audience      string   `json:"audience,omitempty"`
 }
-type token struct {
-	value   string
-	expires time.Time
-}
 type Mounted struct {
 	Namespace, Project, File string
 	HTTP                     *http.Client
+	Shared                   *authstate.Cache
 	mu                       sync.Mutex
 	digest                   [32]byte
 	entries                  map[string]Entry
 	generation               uint64
-	tokens                   map[string]token
-	loads                    singleflight.Group
 	reads, hits, exchanges   atomic.Uint64
 }
 
@@ -52,7 +48,7 @@ func NewMounted(namespace, project, file string) (*Mounted, error) {
 	if namespace == "" || project == "" || file == "" {
 		return nil, fmt.Errorf("credential namespace, project and mounted file are required")
 	}
-	m := &Mounted{Namespace: namespace, Project: project, File: file, HTTP: &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("credential endpoint redirect denied") }}, tokens: map[string]token{}}
+	m := &Mounted{Namespace: namespace, Project: project, File: file, HTTP: &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("credential endpoint redirect denied") }}}
 	if err := m.reload(); err != nil {
 		return nil, err
 	}
@@ -106,7 +102,6 @@ func (m *Mounted) reload() error {
 	m.entries = entries
 	m.digest = digest
 	m.generation++
-	m.tokens = map[string]token{}
 	m.reads.Add(1)
 	return nil
 }
@@ -129,96 +124,108 @@ func (m *Mounted) Read(ctx context.Context, ns, name string) (string, error) {
 		m.hits.Add(1)
 		return entry.Token, nil
 	}
-	if t, ok := m.tokens[name]; ok && time.Now().Before(t.expires) {
-		m.mu.Unlock()
-		m.hits.Add(1)
-		return t.value, nil
-	}
 	m.mu.Unlock()
-	key := fmt.Sprintf("%s/%s/%s/%d", m.Namespace, m.Project, name, generation)
-	ch := m.loads.DoChan(key, func() (any, error) {
-		m.mu.Lock()
-		if generation != m.generation {
-			m.mu.Unlock()
-			return "", fmt.Errorf("credential rotated")
-		}
-		if t, ok := m.tokens[name]; ok && time.Now().Before(t.expires) {
-			m.mu.Unlock()
-			return t.value, nil
-		}
-		m.mu.Unlock()
-		requestCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
-		defer cancel()
-		values := url.Values{"grant_type": {"client_credentials"}}
-		if len(entry.Scopes) > 0 {
-			values.Set("scope", strings.Join(entry.Scopes, " "))
-		}
-		if entry.Audience != "" {
-			values.Set("audience", entry.Audience)
-		}
-		req, err := http.NewRequestWithContext(requestCtx, "POST", entry.TokenEndpoint, strings.NewReader(values.Encode()))
-		if err != nil {
-			return "", fmt.Errorf("token request unavailable")
-		}
-		req.SetBasicAuth(entry.ClientID, entry.ClientSecret)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		m.exchanges.Add(1)
-		resp, err := m.HTTP.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("token service unavailable")
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			return "", fmt.Errorf("token service rejected authentication")
-		}
-		var out struct {
-			AccessToken string `json:"access_token"`
-			TokenType   string `json:"token_type"`
-			ExpiresIn   int    `json:"expires_in"`
-		}
-		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil || out.AccessToken == "" || strings.ContainsAny(out.AccessToken, "\r\n") || !strings.EqualFold(out.TokenType, "Bearer") || out.ExpiresIn <= 0 || out.ExpiresIn > 365*24*3600 {
-			return "", fmt.Errorf("invalid token response")
-		}
-		// Detect a mounted Secret replacement that happened while the endpoint was called.
-		if err := m.reload(); err != nil {
-			return "", err
-		}
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		if generation != m.generation {
-			return "", fmt.Errorf("credential rotated during token acquisition")
-		}
-		lifetime := time.Duration(out.ExpiresIn) * time.Second
-		refresh := lifetime / 10
-		if refresh > 30*time.Second {
-			refresh = 30 * time.Second
-		}
-		m.tokens[name] = token{value: out.AccessToken, expires: time.Now().Add(lifetime - refresh)}
-		return out.AccessToken, nil
-	})
-	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case result := <-ch:
-		if result.Err != nil {
-			return "", result.Err
-		}
-		return result.Val.(string), nil
+	if m.Shared == nil {
+		return "", fmt.Errorf("shared authentication state is required")
 	}
+	return m.readShared(ctx, name, entry, generation)
 }
+
 func (m *Mounted) Invalidate(ns, name string) error {
 	if ns != m.Namespace {
 		return fmt.Errorf("credential belongs to another project scope")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.entries[name]; !ok {
+	entry, ok := m.entries[name]
+	if !ok {
 		return fmt.Errorf("unknown credential")
 	}
-	delete(m.tokens, name)
 	m.generation++
+	if m.Shared != nil && entry.Type == "oauth2" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return m.Shared.Invalidate(ctx, m.sharedKey(name, entry))
+	}
 	return nil
 }
 func (m *Mounted) Stats() map[string]uint64 {
 	return map[string]uint64{"credentialFileLoads": m.reads.Load(), "credentialCacheHits": m.hits.Load(), "oauthExchanges": m.exchanges.Load()}
+}
+
+func (m *Mounted) acquire(ctx context.Context, entry Entry) (authstate.Token, error) {
+	values := url.Values{"grant_type": {"client_credentials"}}
+	if len(entry.Scopes) > 0 {
+		values.Set("scope", strings.Join(entry.Scopes, " "))
+	}
+	if entry.Audience != "" {
+		values.Set("audience", entry.Audience)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", entry.TokenEndpoint, strings.NewReader(values.Encode()))
+	if err != nil {
+		return authstate.Token{}, fmt.Errorf("token request unavailable")
+	}
+	req.SetBasicAuth(entry.ClientID, entry.ClientSecret)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	m.exchanges.Add(1)
+	resp, err := m.HTTP.Do(req)
+	if err != nil {
+		return authstate.Token{}, fmt.Errorf("token service unavailable")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return authstate.Token{}, fmt.Errorf("token service rejected authentication")
+	}
+	var out struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil || out.AccessToken == "" || strings.ContainsAny(out.AccessToken, "\r\n") || !strings.EqualFold(out.TokenType, "Bearer") || out.ExpiresIn <= 0 || out.ExpiresIn > 365*24*3600 {
+		return authstate.Token{}, fmt.Errorf("invalid token response")
+	}
+
+	lifetime := time.Duration(out.ExpiresIn) * time.Second
+	refresh := lifetime / 10
+	if refresh > 30*time.Second {
+		refresh = 30 * time.Second
+	}
+	return authstate.Token{Value: out.AccessToken, Expires: time.Now().Add(lifetime - refresh)}, nil
+}
+
+func (m *Mounted) sharedKey(name string, entry Entry) string {
+	raw, _ := json.Marshal(entry)
+	return m.Shared.Key(m.Namespace, m.Project, name, string(raw))
+}
+
+func (m *Mounted) readShared(ctx context.Context, name string, entry Entry, generation uint64) (string, error) {
+	value, err := m.Shared.Get(ctx, m.sharedKey(name, entry), func(fetch context.Context) (authstate.Token, error) {
+		value, err := m.acquire(fetch, entry)
+		if err != nil {
+			return authstate.Token{}, err
+		}
+		if err = m.reload(); err != nil {
+			return authstate.Token{}, err
+		}
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if generation != m.generation {
+			return authstate.Token{}, fmt.Errorf("credential rotated during token acquisition")
+		}
+		return value, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	// Also check rotations when Get reused state instead of invoking acquisition.
+	if err = m.reload(); err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if generation != m.generation {
+		return "", fmt.Errorf("credential rotated")
+	}
+	m.hits.Add(1)
+	return value.Value, nil
 }

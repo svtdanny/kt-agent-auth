@@ -4,9 +4,12 @@ metadata:
   name: agent-egress
   namespace: ${NAMESPACE}
 spec:
-  replicas: 1
+  replicas: 2
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: agent-egress
@@ -16,6 +19,7 @@ spec:
         app: agent-egress
     spec:
       serviceAccountName: agent-egress
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsUser: 65532
         runAsGroup: 65532
@@ -50,7 +54,7 @@ spec:
         - -c
         - /etc/envoy/envoy.yaml
         - --concurrency
-        - '2'
+        - '1'
         volumeMounts:
         - name: servicedns
           mountPath: /run/servicedns.podcert.ate.dev
@@ -127,6 +131,8 @@ spec:
           value: ${NAMESPACE}
         - name: CREDENTIALS_FILE
           value: /credentials/credentials.json
+        - name: AUTH_STATE_KEY_FILE
+          value: /auth-state-key/key
         - name: SSL_CERT_FILE
           value: /trust/upstream-ca.pem
         - name: DATABASE_URL
@@ -139,6 +145,9 @@ spec:
         volumeMounts:
         - name: application-credentials
           mountPath: /credentials
+          readOnly: true
+        - name: auth-state-key
+          mountPath: /auth-state-key
           readOnly: true
         - name: trust
           mountPath: /trust
@@ -220,3 +229,6 @@ spec:
       - name: application-credentials
         secret:
           secretName: application-credentials
+      - name: auth-state-key
+        secret:
+          secretName: auth-state-key

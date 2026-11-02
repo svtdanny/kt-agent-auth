@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1840" height="970" viewBox="0 125 1840 970" role="img" aria-labelledby="title desc"><title id="title">Agent authorization — deployment and scaling</title><desc id="desc">Current Pod composition with proposed HPAs and shared authentication state. Selected runtime and control dependencies.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10" fill="#536778"/></marker><marker id="control" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10" fill="#9a5714"/></marker></defs>
+<rect x="0" y="0" width="1840" height="1300" fill="white" stroke="none" stroke-width="1.4"/>
+<rect x="30" y="150" width="1350" height="920" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="42" y="139" width="211.20000000000002" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="52" y="156" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">Kubernetes cluster</text>
+<rect x="60" y="205" width="1280" height="150" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="72" y="194" width="221.6" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="82" y="211" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">platform namespaces</text>
+<text x="1324" y="232" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="end">Shared by all projects</text>
+<rect x="80" y="240" width="260" height="88" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="93" y="263" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Deployment</text>
+<text x="93" y="289" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">kagent controller</text>
+<text x="93" y="314" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Session / Agent API</text>
+<rect x="450" y="240" width="290" height="88" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="463" y="263" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Deployments</text>
+<text x="463" y="289" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Substrate APIs</text>
+<text x="463" y="314" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Actor lifecycle / scheduling</text>
+<rect x="830" y="240" width="280" height="88" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="843" y="263" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Shared infrastructure</text>
+<text x="843" y="289" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Metrics + adapter</text>
+<text x="843" y="314" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Resource / external metrics APIs</text>
+<rect x="1140" y="240" width="180" height="88" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="1153" y="263" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Cluster controller</text>
+<text x="1153" y="289" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Node autoscaler</text>
+<text x="1153" y="314" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Node pool capacity</text>
+<path d="M340 283 H450" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="355" y="259" width="43.92" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="360" y="273" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">gRPC</text>
+<path d="M595 328 V400" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="605" y="370" width="131.7" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="610" y="384" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Actor lifecycle</text>
+<rect x="60" y="400" width="1280" height="620" fill="white" stroke="#9aa7b2" stroke-width="1.4" stroke-dasharray="8 5"/>
+<rect x="72" y="389" width="232.0" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="82" y="406" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">namespace: &lt;project&gt;</text>
+<text x="1324" y="427" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="end">× P project namespaces</text>
+<rect x="80" y="465" width="350" height="90" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="93" y="488" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Agent + Harness CRs  × D_p</text>
+<text x="93" y="514" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Per-Agent definitions</text>
+<text x="93" y="539" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Image, configuration, workerPoolRef</text>
+<rect x="1000" y="465" width="300" height="100" fill="#fafafa" stroke="#536778" stroke-width="1.4"/>
+<text x="1013" y="488" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Secret volumes</text>
+<text x="1013" y="514" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Project credentials + key</text>
+<text x="1013" y="539" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Source credentials; auth-state key</text>
+<text x="1013" y="560" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Key shared by this project’s replicas</text>
+<rect x="100" y="585" width="260" height="68" fill="#fffcf6" stroke="#9a5714" stroke-width="1.4"/>
+<text x="113" y="607" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#9a5714" text-anchor="start">HorizontalPodAutoscaler</text>
+<text x="113" y="629" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#9a5714" text-anchor="start">workers</text>
+<text x="113" y="646" font-family="DejaVu Sans, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Active demand / resources / backlog</text>
+<rect x="700" y="585" width="270" height="68" fill="#fffcf6" stroke="#9a5714" stroke-width="1.4"/>
+<text x="713" y="607" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#9a5714" text-anchor="start">HorizontalPodAutoscaler</text>
+<text x="713" y="629" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#9a5714" text-anchor="start">agent-egress</text>
+<text x="713" y="646" font-family="DejaVu Sans, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Envoy + authorizer container metrics</text>
+<path d="M970 328 V371 H445 V619 H360" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<path d="M970 371 H985 V619 H970" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="450" y="377" width="67.85999999999999" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="455" y="391" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">metrics</text>
+<path d="M230 653 V685" fill="none" stroke="#9a5714" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#control)"/>
+<path d="M835 653 V665 H985 V685" fill="none" stroke="#9a5714" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#control)"/>
+<rect x="237" y="662" width="59.879999999999995" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="242" y="676" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#9a5714" text-anchor="start">/scale</text>
+<rect x="990" y="664" width="59.879999999999995" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="995" y="678" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#9a5714" text-anchor="start">/scale</text>
+<path d="M430 510 H435 V671 H392 V685" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="274" y="558" width="114.6" height="18" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="279" y="570" font-family="DejaVu Sans, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">references pool</text>
+<rect x="80" y="685" width="340" height="290" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="92" y="674" width="150" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="102" y="691" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">WorkerPool</text>
+<text x="404" y="712" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="end">replicas = W_p</text>
+<rect x="100" y="740" width="300" height="215" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="112" y="729" width="150" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="122" y="746" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">Pod × W_p</text>
+<rect x="120" y="777" width="260" height="80" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="133" y="800" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Runtime sandbox × active Actors</text>
+<text x="133" y="826" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Agent Sessions</text>
+<text x="133" y="851" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Session identity remains distinct</text>
+<rect x="120" y="891" width="260" height="40" fill="#f4f7fa" stroke="#536778" stroke-width="1.4"/>
+<text x="135" y="918" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">atunnel</text>
+<path d="M250 857 V891" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M380 911 H440 V842 H460" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="445" y="789" width="100.91999999999999" height="19" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="450" y="802" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="400" fill="#526170" text-anchor="start">mTLS CONNECT</text>
+<rect x="460" y="815" width="140" height="55" fill="#f4f7fa" stroke="#536778" stroke-width="1.4"/>
+<text x="471" y="836" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Service</text>
+<text x="471" y="858" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="700" fill="#17212b" text-anchor="start">agent-egress</text>
+<path d="M600 842 H695" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="650" y="685" width="650" height="290" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="662" y="674" width="263.20000000000005" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="672" y="691" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">Deployment/agent-egress</text>
+<text x="1284" y="712" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="end">replicas = G_p; proposed minimum 2</text>
+<rect x="670" y="740" width="610" height="215" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="682" y="729" width="150" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="692" y="746" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">Pod × G_p</text>
+<rect x="695" y="790" width="155" height="80" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="708" y="813" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Container</text>
+<text x="708" y="839" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Envoy</text>
+<text x="708" y="864" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Traffic proxy</text>
+<rect x="1010" y="790" width="245" height="80" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="1023" y="813" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Container</text>
+<text x="1023" y="839" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">authorizer</text>
+<text x="1023" y="864" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">ext_proc + Session bridge</text>
+<path d="M850 832 H1010" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="869" y="803" width="99.77999999999999" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="874" y="817" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">gRPC / mTLS</text>
+<rect x="695" y="905" width="255" height="35" fill="#f4f7fa" stroke="#536778" stroke-width="1.4"/>
+<text x="708" y="928" font-family="DejaVu Sans Mono, sans-serif" font-size="14" font-weight="400" fill="#17212b" text-anchor="start">native-egress  [container]</text>
+<rect x="1010" y="905" width="245" height="35" fill="#f4f7fa" stroke="#536778" stroke-width="1.4"/>
+<text x="1022" y="928" font-family="DejaVu Sans Mono, sans-serif" font-size="14" font-weight="400" fill="#17212b" text-anchor="start">sdsmint  [native sidecar]</text>
+<path d="M1150 565 V790" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<rect x="1158" y="755" width="49.05" height="19" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="1163" y="768" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="400" fill="#526170" text-anchor="start">mount</text>
+<text x="80" y="1004" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">W_p and G_p are independent. All four egress processes share G_p.</text>
+<text x="80" y="1050" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Node pools host platform, worker and gateway Pods; node capacity is managed separately from HPA.</text>
+<rect x="1420" y="150" width="390" height="920" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="1432" y="139" width="221.6" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="1442" y="156" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">Shared dependencies</text>
+<text x="1794" y="177" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="end">In-cluster or managed services</text>
+<path d="M1450 250 C1450 230,1780 230,1780 250 V390 C1780 410,1450 410,1450 390 Z" fill="#f8fafc" stroke="#536778" stroke-width="1.4"/><path d="M1450 250 C1450 270,1780 270,1780 250" fill="none" stroke="#536778" stroke-width="1.4"/>
+<text x="1467" y="290" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="700" fill="#17212b" text-anchor="start">PostgreSQL</text>
+<text x="1467" y="317" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">kagent / Substrate databases</text>
+<text x="1467" y="340" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Per-project bindings DB + role</text>
+<text x="1467" y="363" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Auth-state backend A (optional)</text>
+<text x="1467" y="386" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Ciphertext, versions, refresh leases</text>
+<path d="M1450 505 C1450 485,1780 485,1780 505 V625 C1780 645,1450 645,1450 625 Z" fill="#f8fafc" stroke="#536778" stroke-width="1.4"/><path d="M1450 505 C1450 525,1780 525,1780 505" fill="none" stroke="#536778" stroke-width="1.4"/>
+<text x="1467" y="545" font-family="DejaVu Sans, sans-serif" font-size="21" font-weight="700" fill="#17212b" text-anchor="start">Redis (optional)</text>
+<text x="1467" y="572" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Auth-state backend B</text>
+<text x="1467" y="595" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Per-project ACL + key prefix</text>
+<text x="1467" y="618" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Ciphertext, versions, refresh leases</text>
+<rect x="1450" y="780" width="330" height="90" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="1463" y="803" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Upstream services</text>
+<text x="1463" y="829" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">MCP / application APIs</text>
+<text x="1463" y="854" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Internal or external destinations</text>
+<rect x="1450" y="925" width="330" height="90" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="1463" y="948" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Upstream service</text>
+<text x="1463" y="974" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Authentication endpoint</text>
+<text x="1463" y="999" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Coordinated token acquisition</text>
+<path d="M1255 808 H1355 V320 H1450" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1359" y="295" width="73.56" height="18" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="1364" y="307" font-family="DejaVu Sans, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">SQL / TLS</text>
+<path d="M1255 832 H1400 V565 H1450" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1405" y="539" width="32.519999999999996" height="18" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="1410" y="551" font-family="DejaVu Sans, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">TLS</text>
+<path d="M815 870 V883 H980 V992 H1388 V821 H1450" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1000" y="999" width="212.07" height="19" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="1005" y="1012" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="400" fill="#526170" text-anchor="start">Allowed application traffic</text>
+<path d="M1255 855 H1325 V970 H1450" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1330" y="947" width="46.199999999999996" height="18" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="1335" y="959" font-family="DejaVu Sans, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">HTTPS</text>
+<text x="1450" y="697" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Vault → GitLab → project Secrets</text>
+<text x="1450" y="720" font-family="DejaVu Sans, sans-serif" font-size="13" font-weight="400" fill="#526170" text-anchor="start">Delivery path omitted from runtime view.</text>
+</svg>

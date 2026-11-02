@@ -10,6 +10,11 @@ class BundleTests(unittest.TestCase):
  def test_only_authorizer_mounts_application_credentials(self):
   for c in self.find('Deployment','agent-egress')['spec']['template']['spec']['containers']:
    mounts={m['name'] for m in c.get('volumeMounts',[])};self.assertEqual('application-credentials' in mounts,c['name']=='authorizer')
+   self.assertEqual('auth-state-key' in mounts,c['name']=='authorizer')
+ def test_hpas_scale_project_runtime_resources(self):
+  hpas=[x for x in self.items if x['kind']=='HorizontalPodAutoscaler']
+  self.assertEqual({x['spec']['scaleTargetRef']['kind'] for x in hpas},{'Deployment','WorkerPool'})
+  for hpa in hpas:self.assertEqual(hpa['spec']['behavior']['scaleDown']['selectPolicy'],'Disabled')
  def test_no_secret_api_permissions(self):
   rules=self.find('Role','authorizer-watch')['rules'];self.assertNotIn('secrets',[resource for rule in rules for resource in rule['resources']]);self.assertIn('configmaps',rules[0]['resources'])
  def test_no_shared_gateway_or_pod_listener(self):

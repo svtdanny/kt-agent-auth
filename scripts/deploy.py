@@ -66,17 +66,24 @@ def database(ns):
     url=f'postgresql://{name}:{quote(password,safe="")}@kagent-postgresql.kagent.svc:5432/{name}?sslmode=verify-full&channel_binding=disable&sslrootcert=/run/postgres-ca/trust-bundle.pem'
     apply([obj('Secret','authorizer-db',ns,stringData={'DATABASE_URL':url})])
 
+def auth_state_key(ns):
+    # Local substitute for Vault -> Secret. Keep the same key across redeploys.
+    p=CACHE/(ns+'-auth-state-key')
+    if not p.exists():
+        p.write_text(base64.b64encode(secrets.token_bytes(32)).decode()+'\n');p.chmod(0o600)
+    return obj('Secret','auth-state-key',ns,stringData={'key':p.read_text().strip()})
+
 def policy(ns,write=False):
     return {'permissions':[
         {'id':'internal','type':'http-request/v1','config':{'origin':INTERNAL,'methods':['GET','POST'] if write else ['GET'],'paths':['/catalog','/mcp'],'credential':'api-token'}},
         {'id':'external','type':'http-request/v1','config':{'origin':EXTERNAL,'methods':['GET'],'paths':['/external'],'credential':'api-token'}}]}
 
-def install_fixture(d,k):
+def install_fixture(d,k,image='localhost:5001/auth-demo/test-api:dedicated'):
     apply([obj('Namespace','test-services',None),obj('Secret','dedicated-fixture-keys','test-services',stringData={'keys.json':json.dumps(k)}),
        obj('Service','internal-mcp','test-services',spec={'selector':{'app':'dedicated-fixture'},'ports':[{'port':8080,'targetPort':8080}]}),
        obj('Deployment','dedicated-fixture','test-services',spec={'replicas':1,'strategy':{'type':'Recreate'},'selector':{'matchLabels':{'app':'dedicated-fixture'}},'template':{
           'metadata':{'labels':{'app':'dedicated-fixture'}},'spec':{'automountServiceAccountToken':False,'containers':[{
-             'name':'api','image':'localhost:5001/auth-demo/test-api:dedicated','env':[{'name':'MOCK_KEYS_FILE','value':'/keys/keys.json'},{'name':'MOCK_PLAINTEXT','value':'true'}],
+             'name':'api','image':image,'env':[{'name':'MOCK_KEYS_FILE','value':'/keys/keys.json'},{'name':'MOCK_PLAINTEXT','value':'true'}],
              'volumeMounts':[{'name':'keys','mountPath':'/keys','readOnly':True}]}],'volumes':[{'name':'keys','secret':{'secretName':'dedicated-fixture-keys'}}]}}})])
     target=CACHE/'dedicated-external';target.mkdir(exist_ok=True,mode=0o700)
     import shutil
@@ -86,7 +93,7 @@ def install_fixture(d,k):
     node=json.loads(run(['docker','inspect','auth-demo']))[0];network=next(iter(node['NetworkSettings']['Networks']))
     subprocess.run(['docker','rm','-f','auth-dedicated-external'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     run(['docker','run','-d','--name','auth-dedicated-external','--network',network,'--user',f'{os.getuid()}:{os.getgid()}',
-        '-p','127.0.0.1:18458:8443','--mount','type=bind,src='+str(target)+',dst=/tls,readonly','-e','MOCK_KEYS_FILE=/tls/keys.json','localhost:5001/auth-demo/test-api:dedicated'])
+        '-p','127.0.0.1:18458:8443','--mount','type=bind,src='+str(target)+',dst=/tls,readonly','-e','MOCK_KEYS_FILE=/tls/keys.json',image])
     ip=json.loads(run(['docker','inspect','auth-dedicated-external']))[0]['NetworkSettings']['Networks'][network]['IPAddress']
     cm=json.loads(kubectl('-n','kube-system','get','cm','coredns','-o','json'));core=cm['data']['Corefile']
     import re
@@ -129,7 +136,7 @@ def main():
     apply([obj('Namespace',ns,None) for ns in SCOPES])
     for ns in SCOPES:
         database(ns)
-        copies=[]
+        copies=[auth_state_key(ns)]
         for name in ['actor-id-ca-certs','egress-mitm-ca-pool']:
             source=json.loads(kubectl('-n','ate-system','get','secret',name,'-o','json'));copies.append(obj('Secret',name,ns,data=source['data']))
         copies.extend([tls_secret(ns,'authorizer-tls','authorizer',certificates(ns)),tls_secret(ns,'auth-client','auth-egress',certificates(ns)),

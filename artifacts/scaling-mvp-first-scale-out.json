@@ -1,0 +1,171 @@
+{
+  "timestamp": "2026-11-02T04:41:57.192292+00:00",
+  "namespace": "auth-agent-a",
+  "scope": "MVP correctness and HPA control; no capacity or HA claim",
+  "checks": [
+    {
+      "test": "replicas share one external credential",
+      "passed": true,
+      "replicas": 2,
+      "requests": 4,
+      "externalLogins": 1,
+      "sessionId": "01a19a8d-7a23-7280-8f8e-d219156ce69e"
+    },
+    {
+      "test": "warm reads reuse shared state without external login",
+      "passed": true
+    },
+    {
+      "test": "encrypted state persisted; encryption key mounted only in authorizer",
+      "passed": true
+    },
+    {
+      "test": "all replicas restarted and reused persisted token",
+      "passed": true,
+      "externalLogins": 1
+    },
+    {
+      "test": "expired shared state refreshes once across replicas",
+      "passed": true,
+      "externalLogins": 2
+    },
+    {
+      "test": "explicit invalidation reaches replicas and refreshes once",
+      "passed": true,
+      "externalLogins": 3
+    },
+    {
+      "test": "HPA scales both targets; new egress replica reuses token",
+      "passed": true,
+      "egressReplicas": 3,
+      "workerReplicas": 2,
+      "testCpuThreshold": "1n (control-path test only)",
+      "externalLogins": 3,
+      "hpaStatus": [
+        {
+          "name": "agent-egress",
+          "status": {
+            "conditions": [
+              {
+                "lastTransitionTime": "2026-11-02T04:33:01Z",
+                "message": "recommended size matches current size",
+                "reason": "ReadyForNewScale",
+                "status": "True",
+                "type": "AbleToScale"
+              },
+              {
+                "lastTransitionTime": "2026-11-02T04:40:47Z",
+                "message": "the HPA was able to successfully calculate a replica count from cpu resource",
+                "reason": "ValidMetricFound",
+                "status": "True",
+                "type": "ScalingActive"
+              },
+              {
+                "lastTransitionTime": "2026-11-02T04:41:02Z",
+                "message": "the desired count is within the acceptable range",
+                "reason": "DesiredWithinRange",
+                "status": "False",
+                "type": "ScalingLimited"
+              },
+              {
+                "lastTransitionTime": "2026-11-02T04:40:47Z",
+                "message": "the HPA controller did not scale the workload to zero",
+                "reason": "NotScaledToZero",
+                "status": "False",
+                "type": "ScaledToZero"
+              }
+            ],
+            "currentMetrics": [
+              {
+                "containerResource": {
+                  "container": "envoy",
+                  "current": {
+                    "averageValue": "2m"
+                  },
+                  "name": "cpu"
+                },
+                "type": "ContainerResource"
+              },
+              {
+                "containerResource": {
+                  "container": "authorizer",
+                  "current": {
+                    "averageValue": "1m"
+                  },
+                  "name": "cpu"
+                },
+                "type": "ContainerResource"
+              }
+            ],
+            "currentReplicas": 3,
+            "desiredReplicas": 3,
+            "lastScaleTime": "2026-11-02T04:40:47Z",
+            "observedGeneration": 2
+          }
+        },
+        {
+          "name": "agent-workers",
+          "status": {
+            "conditions": [
+              {
+                "lastTransitionTime": "2026-11-02T04:33:01Z",
+                "message": "the HPA controller was able to update the target scale to 2",
+                "reason": "SucceededRescale",
+                "status": "True",
+                "type": "AbleToScale"
+              },
+              {
+                "lastTransitionTime": "2026-11-02T04:33:01Z",
+                "message": "the HPA was able to successfully calculate a replica count from cpu resource",
+                "reason": "ValidMetricFound",
+                "status": "True",
+                "type": "ScalingActive"
+              },
+              {
+                "lastTransitionTime": "2026-11-02T04:41:47Z",
+                "message": "the desired replica count is more than the maximum replica count",
+                "reason": "TooManyReplicas",
+                "status": "True",
+                "type": "ScalingLimited"
+              },
+              {
+                "lastTransitionTime": "2026-11-02T04:41:47Z",
+                "message": "the HPA controller did not scale the workload to zero",
+                "reason": "NotScaledToZero",
+                "status": "False",
+                "type": "ScaledToZero"
+              }
+            ],
+            "currentMetrics": [
+              {
+                "resource": {
+                  "current": {
+                    "averageValue": "51m"
+                  },
+                  "name": "cpu"
+                },
+                "type": "Resource"
+              }
+            ],
+            "currentReplicas": 1,
+            "desiredReplicas": 2,
+            "lastScaleTime": "2026-11-02T04:41:47Z",
+            "observedGeneration": 2
+          }
+        }
+      ],
+      "egressBefore": 2,
+      "workersBefore": 1,
+      "workerScaleOutObserved": true
+    },
+    {
+      "test": "real Agent Session uses OAuth through Envoy after scaling; denied path remains denied",
+      "passed": true
+    }
+  ],
+  "complete": true,
+  "notes": [
+    "First live scale-out run used a 1n CPU target, which Kubernetes rounds to 1m for this calculation. The reproducible script now uses 1m explicitly and starts its Actor before sampling worker CPU.",
+    "Direct replica checks use the test gateway certificate. The final Session checks traverse Envoy."
+  ]
+}

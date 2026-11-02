@@ -37,12 +37,12 @@ def main():
         pools=json.loads(kubectl('-n',ns,'get','workerpools.ate.dev','-o','json'))['items']
         workers=json.loads(kubectl('-n',ns,'get','pods','-l','ate.dev/worker-pool=agent-workers','-o','json'))['items']
         gateways=[d for d in json.loads(kubectl('-n',ns,'get','deploy','-o','json'))['items'] if d['spec']['template']['metadata'].get('labels',{}).get('app')=='agent-egress']
-        assert len(pools)==1 and len(workers)==1 and len(gateways)==1,(len(pools),len(workers),len(gateways))
+        assert len(pools)==1 and len(workers)>=1 and len(gateways)==1,(len(pools),len(workers),len(gateways))
         for name in [AGENT,second]:
             agent=json.loads(kubectl('-n',ns,'get','agent',name,'-o','json'))
             harness=json.loads(kubectl('-n',ns,'get','harness',agent['spec']['harnessRef']['name'],'-o','json'))
             assert harness['spec']['substrate']['workerPoolRef']['name']=='agent-workers'
-        report={'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat(),'projectNamespace':ns,'workerPools':1,'workerPods':1,'proxyDeployments':len(gateways),'otherProjectRejected':True,'agents':checks}
+        report={'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat(),'projectNamespace':ns,'workerPools':1,'workerPods':len(workers),'proxyDeployments':len(gateways),'otherProjectRejected':True,'agents':checks}
         (ROOT/'artifacts/project-sharing.json').write_text(json.dumps(report,indent=2)+'\n')
         print('PASS: two Agents share one worker pool and project proxy; identity, HTTP grants and project isolation preserved',flush=True)
     finally:

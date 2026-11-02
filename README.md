@@ -92,9 +92,15 @@ Supported entries:
 }
 ```
 
-OAuth uses the client-credentials grant, verifies HTTPS, rejects redirects, coalesces simultaneous refreshes, and caches tokens until shortly before expiry. A mounted document change clears that authorizer's token cache. Rotation during an exchange prevents publishing the previous token. Credential values and authorization headers are excluded from logs. Other login protocols require another resolver.
+OAuth uses the client-credentials grant, verifies HTTPS and rejects redirects. The reusable [authstate package](pkg/authstate/cache.go) encrypts derived tokens with AES-256-GCM in the project's PostgreSQL database and coordinates refresh across replicas with short per-record leases. Authentication HTTP calls hold no SQL transaction or connection. A two-second shared failure cooldown bounds repeated failed acquisitions. Local token copies recheck shared state at most once per second per active credential; explicit invalidation can therefore take one second to reach peers. A valid persisted token survives authorizer restart without another login.
 
-The local pilot reuses the platform PostgreSQL server, with a separate login/database and private `auth_bridge` schema per project. It never queries kagent's internal tables. Bindings survive bundle restarts. Revocation occurs before bridge-driven native deletion. A background job lists native Sessions every five minutes and confirms missing Sessions before revoking; suspended Sessions remain active. Revoked bindings stay 24 hours for debugging and retired request IDs seven days. Failed or partial scans do not clean up mappings.
+Deliver `auth-state-key` through Vault/CI alongside application credentials. Its `key` file contains base64 of 32 random bytes; only authorizer mounts it. All replicas of one project need the same key, and projects use different keys. The key is loaded at startup. Automatic encryption-key rotation/re-encryption is outside this MVP: retain the key while its stored records are needed. Changing it changes record identities and requires fresh authentication.
+
+Credential configuration determines the shared record identity, so mounted source-credential rotation selects a new record and an in-flight old acquisition cannot overwrite it. Secret projections can reach replicas at different times; this MVP does not provide an atomic cluster-wide source rotation. Credential values and authorization headers are excluded from logs. Upstream-401 refresh/replay and protocols other than client credentials remain outside this MVP.
+
+The local pilot reuses the platform PostgreSQL server, with a separate login/database and private `auth_bridge` and `auth_state` schemas per project. It never queries kagent's internal tables. Bindings survive bundle restarts. Revocation occurs before bridge-driven native deletion. A background job lists native Sessions every five minutes and confirms missing Sessions before revoking; suspended Sessions remain active. Revoked bindings stay 24 hours for debugging and retired request IDs seven days. Failed or partial scans do not clean up mappings.
+
+The namespace bundle starts two egress replicas with rolling updates and includes two CPU-based HPAs: egress scales from two to three Pods using separate Envoy/authorizer measurements; the WorkerPool CR scales from one to two workers. The HPA controller owns replica counts after deployment; avoid repeatedly applying static replica counts from an unrelated pipeline. Envoy has one worker thread and a one-CPU limit. Automatic scale-down is disabled until Actor and tunnel draining are validated. These are small MVP bounds, not production capacity settings; worker backlog and Actor capacity metrics are not implemented here. A resource metrics provider is required.
 
 ## Run and test
 
@@ -109,6 +115,9 @@ python3 scripts/test_project.py
 python3 scripts/benchmark.py
 python3 scripts/test_postgres.py
 
+# Small scaling/auth-state check on the existing cluster (no load benchmark):
+python3 scripts/test_scaling.py
+
 # Fresh local platform, then build/deploy:
 python3 scripts/up.py
 ```
@@ -121,7 +130,7 @@ The two test namespaces are `auth-agent-a` and `auth-agent-b`. The test uses rea
 
 ```bash
 go test ./...
-go test -race ./internal/...
+go test -race ./internal/... ./pkg/...
 go vet ./...
 python3 scripts/test_deploy_bundle.py
 node --test agent/server.test.mjs
@@ -129,6 +138,14 @@ python3 k8s/test_render.py
 ```
 
 The SQL tests skip without their integration environment; `test_postgres.py` runs them against an isolated database. The full local installer is separate from testing changes on an existing cluster. Minikube does not establish production CNI enforcement, multi-node behavior, HA or a performance SLA. Approval UI integration and non-HTTP protocol adapters remain future work.
+
+The small [scaling MVP check](scripts/test_scaling.py) builds only authorizer/test-api, substitutes a locally generated Secret for Vault delivery, and uses four to six direct replica requests per phase plus one real Agent Session. It checks shared acquisition, restart reuse, expiry, invalidation and HPA control. CPU targets temporarily drop to `1m` to avoid a load benchmark, then return to their defaults. The test restores application credentials and removes its Session, leaving bounded replica counts in place. It does not test Vault/GitLab, throughput, automatic scale-down or transparent recovery of in-flight streams. On repeat runs, workers may already be at the two-replica cap; the report records whether worker scale-out was observed.
+
+Results: [first scale-out](artifacts/scaling-mvp-first-scale-out.json) and [latest MVP run](artifacts/scaling-mvp.json). A lease prevents competing publication, but cannot make an external login exactly once if a process dies after the external system accepts it. The MVP also retains old auth-state records; retention and key migration remain follow-up work.
+
+The separate [shared Envoy experiment](scripts/test_shared_egress.py) tests direct atespace-based `ext_proc` selection with no dispatcher. [The generator](scripts/shared_egress.py) hardcodes `auth-agent-a → authorizer-extproc.auth-agent-a.svc:50052` and the corresponding project B DNS. It matches the certificate-derived `dev.ate.actor.identity` filter state, preserves the native destination/policy matches, and overrides only the custom processor's gRPC cluster. Application traffic stays in shared Envoy; the DNS targets expose the authorizer port of each existing namespace proxy bundle. This is not forwarding application traffic through a second Envoy.
+
+Run `python3 scripts/test_shared_egress.py` on the existing local pilot. It temporarily deploys one shared gateway and selects the official unpatched Substrate API image. Native egress is built from the untouched pinned module. Project source credentials and encryption keys stay in their namespace authorizers; the shared gateway mounts the existing per-project gateway client TLS identities for this MVP. The test checks HTTP/HTTPS credentials, spoofed headers, interleaved project requests, a deliberate wrong-authorizer route, and an unavailable authorizer. It restores the prior API template and deletes its temporary resources. It does not migrate the existing deployment. [Results](artifacts/shared-egress-mvp.json); the exact generated Envoy config remains in `.cache/shared-egress-mvp/envoy.yaml` after the run.
 
 ## Validated on local Minikube
 

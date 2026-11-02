@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-11-02T08:59:13.768853+00:00",
+  "complete": true,
+  "topology": "shared Envoy -> hardcoded namespace authorizer gRPC Services; application traffic stays in shared Envoy",
+  "stockApiImage": "ghcr.io/kagent-dev/substrate/ateapi:v0.6.0-alpha3",
+  "nativeEgress": "built from untouched v0.6.0-alpha3 module",
+  "routes": {
+    "auth-agent-a": "authorizer-extproc.auth-agent-a.svc",
+    "auth-agent-b": "authorizer-extproc.auth-agent-b.svc"
+  },
+  "checks": [
+    {
+      "test": "official stock Substrate API uses one shared gateway address; routing patch not active",
+      "passed": true
+    },
+    {
+      "test": "two real Agent Sessions select the correct namespace credentials for HTTP and HTTPS",
+      "passed": true
+    },
+    {
+      "test": "shared gateway access logs confirm both certificate-derived Actor identities",
+      "passed": true
+    },
+    {
+      "test": "forged namespace/identity headers cannot select another authorizer; path denials preserved",
+      "passed": true
+    },
+    {
+      "test": "project-specific method permissions preserved",
+      "passed": true
+    },
+    {
+      "test": "eight interleaved requests keep project tokens separate",
+      "passed": true,
+      "requests": 8,
+      "concurrency": 2
+    },
+    {
+      "test": "deliberate A -> B misroute is rejected by B before releasing credentials",
+      "passed": true
+    },
+    {
+      "test": "unavailable A authorizer fails closed while B continues; no fallback across projects",
+      "passed": true
+    },
+    {
+      "test": "normal hardcoded routes recover after restoring configuration",
+      "passed": true
+    }
+  ],
+  "configSha256": "5eadf47dd273e7b4b7d4a3cde29383ecfbd11d5607538666b4ea41fd28fa2008",
+  "httpRequests": 23,
+  "sessions": {
+    "auth-agent-a": "01a19b7c-9ccb-7833-8eff-e0e6c7e760c2",
+    "auth-agent-b": "01a19b7c-f639-7b6a-babd-56f4f448ebb6"
+  },
+  "restoredPreviousDeployment": true
+}

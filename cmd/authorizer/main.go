@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"example.com/auth-demo/internal/controlplane"
 	"example.com/auth-demo/internal/credential"
 	"example.com/auth-demo/internal/extproc"
 	"example.com/auth-demo/internal/store"
 	"example.com/auth-demo/internal/transport"
+	"example.com/auth-demo/pkg/authstate"
 	extv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -18,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -50,6 +53,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	keyFile, err := os.ReadFile(os.Getenv("AUTH_STATE_KEY_FILE"))
+	if err != nil {
+		log.Fatal("auth-state encryption key unavailable")
+	}
+	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(keyFile)))
+	if err != nil {
+		log.Fatal("invalid auth-state encryption key")
+	}
+	provider.Shared, err = authstate.New(ctx, db.Pool, key)
+	if err != nil {
+		log.Fatal("auth-state initialization failed: ", err)
+	}
 	s, err := controlplane.New(k, db, env("KAGENT_TARGET", "kagent-controller.kagent.svc:8083"), ns, env("TOKEN_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token"), objects, provider)
 	if err != nil {
 		log.Fatal(err)
@@ -81,7 +96,11 @@ func main() {
 	server := &http.Server{Addr: ":8444", Handler: s.Handler(), TLSConfig: httpTLS, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 180 * time.Second}
 	go func() {
 		<-ctx.Done()
-		processor.Stop()
+		go func() {
+			timer := time.AfterFunc(10*time.Second, processor.Stop)
+			defer timer.Stop()
+			processor.GracefulStop()
+		}()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdown)

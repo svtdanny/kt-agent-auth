@@ -1,0 +1,46 @@
+%% ARCH-02 / 2 — independent authorizer Deployment alternative.
+%% W_p = workers; G_p = gateway Pods; A_p = authorizer Pods.
+flowchart LR
+    subgraph PROJECT["namespace: project — alternative deployment boundary"]
+        DEF["Agent + Harness definitions"]
+        HW["HPA: workers"]
+        HG["HPA: agent-egress"]
+        HA["HPA: authorizer"]
+        subgraph WP["WorkerPool — replicas W_p"]
+            subgraph WPOD["Pod × W_p"]
+                ACTOR["Agent Session sandboxes"] --> TUNNEL["atunnel"]
+            end
+        end
+        GS["Service: agent-egress"]
+        subgraph GD["Deployment: agent-egress — replicas G_p"]
+            subgraph GPOD["Pod × G_p"]
+                ENVOY["Container: Envoy"]
+                NATIVE["Container: native-egress"]
+                SDS["Native sidecar: sdsmint"]
+            end
+        end
+        AS["Service: authorizer"]
+        subgraph AD["Deployment: authorizer — replicas A_p"]
+            subgraph APOD["Pod × A_p"]
+                AUTH["Container: authorizer<br/>ext_proc + Session bridge<br/>Local token cache"]
+            end
+        end
+        GSA["ServiceAccount: agent-egress"]
+        ASA["ServiceAccount: authorizer<br/>Project DB / Redis access; optional KMS role"]
+        SEC["Project credentials + encryption key"]
+        HW -.->|/scale| WP
+        HG -.->|/scale| GD
+        HA -.->|/scale| AD
+        DEF -.->|references| WP
+        GSA -.-> GD
+        ASA -.-> AD
+        SEC -.->|mount| AUTH
+        TUNNEL -->|"mTLS CONNECT"| GS --> ENVOY
+        ENVOY -->|"gRPC / mTLS"| AS --> AUTH
+    end
+    SHARED["Shared dependencies as in ARCH-02 / 1<br/>PostgreSQL; optional Redis; external authentication endpoint"]
+    AUTH --> SHARED
+    ENVOY --> APIS["MCP / application APIs"]
+    classDef default fill:#fff,stroke:#536778,color:#17212b;
+    classDef hpa fill:#fffcf6,stroke:#9a5714,color:#9a5714;
+    class HW,HG,HA hpa;

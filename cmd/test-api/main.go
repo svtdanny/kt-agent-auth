@@ -6,13 +6,40 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func newHandler(readerToken, writerToken string) http.Handler {
 	var mu sync.Mutex
 	var events []map[string]any
+	// Synthetic OAuth fixture: only the most recently issued token remains valid.
+	issued := map[string]string{}
+	versions := map[string]int{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth/stats" {
+			mu.Lock()
+			defer mu.Unlock()
+			_ = json.NewEncoder(w).Encode(versions)
+			return
+		}
+		if r.URL.Path == "/oauth/token" {
+			user, password, ok := r.BasicAuth()
+			_ = r.ParseForm()
+			if r.Method != "POST" || !ok || r.Form.Get("grant_type") != "client_credentials" ||
+				!((user == "reader" && password == readerToken) || (user == "writer" && password == writerToken)) {
+				w.WriteHeader(401)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			issued[user] = uuid.NewString()
+			versions[user]++
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": issued[user], "token_type": "Bearer", "expires_in": 3600})
+			return
+		}
 		if r.URL.Path == "/readyz" {
 			w.WriteHeader(200)
 			return
@@ -29,18 +56,26 @@ func newHandler(readerToken, writerToken string) http.Handler {
 			return
 		}
 		identity := ""
+		version := 0
 		values := r.Header.Values("Authorization")
+		mu.Lock()
 		if len(values) == 1 {
 			switch {
 			case readerToken != "" && values[0] == "Bearer "+readerToken:
 				identity = "reader"
 			case writerToken != "" && values[0] == "Bearer "+writerToken:
 				identity = "writer"
+			default:
+				for user, token := range issued {
+					if values[0] == "Bearer "+token {
+						identity = user
+						version = versions[user]
+					}
+				}
 			}
 		}
 		// Audit key identity and header count, never the credential itself.
-		event := map[string]any{"method": r.Method, "path": r.URL.Path, "credential": identity, "credentialAccepted": identity != "", "authorizationHeaderCount": len(values), "remoteAddress": r.RemoteAddr}
-		mu.Lock()
+		event := map[string]any{"method": r.Method, "path": r.URL.Path, "credential": identity, "credentialVersion": version, "credentialAccepted": identity != "", "authorizationHeaderCount": len(values), "remoteAddress": r.RemoteAddr, "timestamp": time.Now().UTC()}
 		events = append(events, event)
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")

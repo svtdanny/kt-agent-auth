@@ -10,11 +10,22 @@ deploy-agent-credentials:
       vault: projects/agent-a/credentials_json@kv
       token: $VAULT_ID_TOKEN
       file: true
+    AUTH_STATE_KEY:
+      vault: projects/agent-a/auth_state_key@kv
+      token: $VAULT_ID_TOKEN
+      file: true
   script:
     - >-
       kubectl --context "$KUBE_CONTEXT" --namespace "$PROJECT_NAMESPACE"
       create secret generic application-credentials
       --from-file=credentials.json="$AGENT_CREDENTIALS_JSON"
+      --dry-run=client -o json |
+      kubectl --context "$KUBE_CONTEXT" --namespace "$PROJECT_NAMESPACE" apply -f -
+    # Vault value is base64 of 32 random bytes, shared by this project's replicas.
+    - >-
+      kubectl --context "$KUBE_CONTEXT" --namespace "$PROJECT_NAMESPACE"
+      create secret generic auth-state-key
+      --from-file=key="$AUTH_STATE_KEY"
       --dry-run=client -o json |
       kubectl --context "$KUBE_CONTEXT" --namespace "$PROJECT_NAMESPACE" apply -f -
     # Apply the project policy ConfigMap, ServiceAccount policy reference, and

@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2040" height="1400" viewBox="0 0 2040 1400" role="img" aria-labelledby="title desc"><title id="title">PostgreSQL token refresh across authorizer replicas</title><desc id="desc">Request-driven local cache; conditional SQL refresh lease; fenced encrypted publication; peers observe changes on use without pub-sub or background polling.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10" fill="#536778"/></marker><marker id="control" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10" fill="#9a5714"/></marker></defs>
+<rect x="0" y="0" width="2040" height="1400" fill="white" stroke="none" stroke-width="1.4"/>
+<rect x="50" y="35" width="400" height="90" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="63" y="58" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Protocol participant</text>
+<text x="63" y="84" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Authorizer replica A</text>
+<text x="63" y="109" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Same project key Ka</text>
+<path d="M250 125 V970" fill="none" stroke="#536778" stroke-width="1" stroke-linejoin="round" stroke-dasharray="7 5"/>
+<rect x="560" y="35" width="400" height="90" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="573" y="58" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Protocol participant</text>
+<text x="573" y="84" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">Authorizer replica B</text>
+<text x="573" y="109" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Same project key Ka</text>
+<path d="M760 125 V970" fill="none" stroke="#536778" stroke-width="1" stroke-linejoin="round" stroke-dasharray="7 5"/>
+<rect x="1060" y="35" width="400" height="90" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="1073" y="58" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Protocol participant</text>
+<text x="1073" y="84" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">PostgreSQL</text>
+<text x="1073" y="109" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">auth_state.tokens[id]</text>
+<path d="M1260 125 V970" fill="none" stroke="#536778" stroke-width="1" stroke-linejoin="round" stroke-dasharray="7 5"/>
+<rect x="1590" y="35" width="400" height="90" fill="white" stroke="#536778" stroke-width="1.4"/>
+<text x="1603" y="58" font-family="DejaVu Sans Mono, sans-serif" font-size="12" font-weight="400" fill="#526170" text-anchor="start">Protocol participant</text>
+<text x="1603" y="84" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17212b" text-anchor="start">OAuth provider</text>
+<text x="1603" y="109" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">HTTPS / client_credentials</text>
+<path d="M1790 125 V970" fill="none" stroke="#536778" stroke-width="1" stroke-linejoin="round" stroke-dasharray="7 5"/>
+<path d="M250 195 H1260" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="261" y="171" width="482.81999999999994" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="266" y="185" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">1  Token needed; local miss / freshness expired → SELECT id</text>
+<path d="M760 260 H1260" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="771" y="236" width="315.23999999999995" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="776" y="250" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">2  Competing request reads the same id</text>
+<path d="M250 325 H1260" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="261" y="301" width="482.81999999999994" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="266" y="315" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">3  Conditional UPDATE → owner UUID; version++; lease = 12 s</text>
+<path d="M1260 380 H250" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="261" y="356" width="387.05999999999995" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="266" y="370" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Lease granted to A; commit before external HTTP</text>
+<path d="M760 440 H1260" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="771" y="416" width="275.34" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="776" y="430" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">4  B cannot claim unexpired lease</text>
+<path d="M250 505 H1790" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="261" y="481" width="530.6999999999999" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="266" y="495" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">5  A acquires derived token; timeout 8 s; no SQL transaction held</text>
+<path d="M1260 565 H760" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="771" y="541" width="355.14" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="776" y="555" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">B waits 100 ms, then re-reads; bounded wait</text>
+<path d="M1790 635 H250" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="261" y="611" width="299.28" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="266" y="625" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">6  Provider returns token + lifetime</text>
+<path d="M250 705 H1260" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="261" y="681" width="498.78" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="266" y="695" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">7  Encrypt; publish WHERE owner/version match AND lease valid</text>
+<path d="M1260 765 H250" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="261" y="741" width="379.08" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="266" y="755" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">Commit ciphertext + safe expiry; release lease</text>
+<path d="M760 835 H1260" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="771" y="811" width="315.23999999999995" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="776" y="825" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">8  Next re-read sees published version</text>
+<path d="M1260 895 H760" fill="none" stroke="#536778" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="771" y="871" width="442.91999999999996" height="20" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="776" y="885" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#526170" text-anchor="start">B decrypts with Ka; both replicas reuse the same token</text>
+<rect x="61" y="950" width="790.05" height="21" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="66" y="965" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Mutation result → shared Envoy injects Authorization; upstream application request resumes.</text>
+<rect x="45" y="1020" width="945" height="335" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="57" y="1009" width="356.8" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="67" y="1026" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">Local cache and database traffic</text>
+<text x="70" y="1065" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Only a request that needs this token triggers a cache check.</text>
+<text x="70" y="1095" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Valid memory entry + successful SQL check &lt; 1 s ago → reuse locally.</text>
+<text x="70" y="1125" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Otherwise SELECT this token id; idle entries do not poll.</text>
+<text x="70" y="1155" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Steady traffic: ≈ 1 token-state read / s / active id / replica.</text>
+<text x="70" y="1185" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Pool connections do not each run a one-second query.</text>
+<text x="70" y="1215" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Separately: 2 binding reads per successful credentialed request.</text>
+<text x="70" y="1245" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Refresh contenders use temporary 100 ms polls; work timeout 20 s.</text>
+<text x="70" y="1275" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Restarted replicas reuse a valid stored token on first use.</text>
+<text x="70" y="1305" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">No pub-sub / NOTIFY; peers observe changes on their next check.</text>
+<rect x="1040" y="1020" width="955" height="335" fill="white" stroke="#9aa7b2" stroke-width="1.4"/>
+<rect x="1052" y="1009" width="377.6" height="23" fill="white" stroke="none" stroke-width="1.4"/>
+<text x="1062" y="1026" font-family="DejaVu Sans Mono, sans-serif" font-size="17" font-weight="700" fill="#17212b" text-anchor="start">Failure, invalidation and rotation</text>
+<text x="1065" y="1065" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">OAuth failure → release lease; shared retry_after = now + 2 s.</text>
+<text x="1065" y="1095" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Owner crash → next contender may claim after lease expiry.</text>
+<text x="1065" y="1125" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Owner/version fence rejects a late publication by an old owner.</text>
+<text x="1065" y="1155" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">An ambiguous external timeout may still cause another login.</text>
+<text x="1065" y="1185" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Admin invalidation: version++; clear token, expiry and lease.</text>
+<text x="1065" y="1215" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Peers stop reusing it after request-driven local freshness expires.</text>
+<text x="1065" y="1245" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Mounted source config change → new HMAC id; Secret updates are eventual.</text>
+<text x="1065" y="1275" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">Storage-key rotation and upstream-401 refresh/replay are not implemented.</text>
+<text x="1065" y="1305" font-family="DejaVu Sans, sans-serif" font-size="15" font-weight="400" fill="#526170" text-anchor="start">No SQL row lock or connection is held across the provider call.</text>
+</svg>

@@ -1,6 +1,7 @@
 package credential
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,10 +9,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"example.com/auth-demo/pkg/authstate"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func secret(t *testing.T, p string, entries map[string]Entry) {
@@ -23,6 +26,58 @@ func secret(t *testing.T, p string, entries map[string]Entry) {
 	}
 	if err := os.Rename(tmp, p); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSharedOAuthReplicasAndCredentialRotation(t *testing.T) {
+	url := os.Getenv("AUTH_DEMO_TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("requires isolated PostgreSQL integration database")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	var calls atomic.Int64
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, pass, _ := r.BasicAuth()
+		fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":3600}`, "derived-"+pass)
+	}))
+	defer server.Close()
+	p := filepath.Join(t.TempDir(), "credentials.json")
+	secret(t, p, map[string]Entry{"api-token": {Type: "oauth2", TokenEndpoint: server.URL, ClientID: "client", ClientSecret: "old"}})
+	newReplica := func() *Mounted {
+		m, e := NewMounted("project-a", "project-a", p)
+		if e != nil {
+			t.Fatal(e)
+		}
+		m.HTTP = server.Client()
+		m.Shared, e = authstate.New(ctx, pool, bytes.Repeat([]byte{5}, 32))
+		if e != nil {
+			t.Fatal(e)
+		}
+		return m
+	}
+	a, b := newReplica(), newReplica()
+	for _, m := range []*Mounted{a, b, newReplica()} {
+		if v, e := m.Read(ctx, "project-a", "api-token"); e != nil || v != "derived-old" {
+			t.Fatal(v, e)
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatal("replicas/restart repeated login", calls.Load())
+	}
+	secret(t, p, map[string]Entry{"api-token": {Type: "oauth2", TokenEndpoint: server.URL, ClientID: "client", ClientSecret: "new"}})
+	for _, m := range []*Mounted{b, a} {
+		if v, e := m.Read(ctx, "project-a", "api-token"); e != nil || v != "derived-new" {
+			t.Fatal(v, e)
+		}
+	}
+	if calls.Load() != 2 {
+		t.Fatal("rotation was not shared", calls.Load())
 	}
 }
 func TestMountedCredentialsScopeRotationAndInvalidDocuments(t *testing.T) {
@@ -54,66 +109,40 @@ func TestMountedCredentialsScopeRotationAndInvalidDocuments(t *testing.T) {
 		t.Fatal("removed credential reused")
 	}
 }
-func TestOAuthCacheCoalescingRefreshAndIndependentAgents(t *testing.T) {
-	var calls atomic.Int64
+func TestOAuthProtocolAndRefreshDeadline(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		user, pass, ok := r.BasicAuth()
+		user, pass, _ := r.BasicAuth()
 		r.ParseForm()
-		if !ok || user != "client" || pass != "secret" || r.Form.Get("grant_type") != "client_credentials" {
+		if user != "client" || pass != "secret" || r.Form.Get("grant_type") != "client_credentials" {
 			w.WriteHeader(401)
 			return
 		}
-		time.Sleep(25 * time.Millisecond)
-		fmt.Fprint(w, `{"access_token":"scoped-access","token_type":"Bearer","expires_in":1}`)
+		fmt.Fprint(w, `{"access_token":"scoped-access","token_type":"Bearer","expires_in":10}`)
 	}))
 	defer server.Close()
-	p := filepath.Join(t.TempDir(), "credentials.json")
-	secret(t, p, map[string]Entry{"api-token": {Type: "oauth2", TokenEndpoint: server.URL, ClientID: "client", ClientSecret: "secret"}})
-	a, err := NewMounted("agent-a", "mastra", p)
-	if err != nil {
-		t.Fatal(err)
+	m := &Mounted{HTTP: server.Client()}
+	entry := Entry{Type: "oauth2", TokenEndpoint: server.URL, ClientID: "client", ClientSecret: "secret"}
+	before := time.Now()
+	v, e := m.acquire(context.Background(), entry)
+	if e != nil || v.Value != "scoped-access" || v.Expires.Before(before.Add(8*time.Second)) || v.Expires.After(before.Add(10*time.Second)) {
+		t.Fatal("bad token or refresh deadline", e)
 	}
-	a.HTTP = server.Client()
-	var wg sync.WaitGroup
-	for range 32 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			value, err := a.Read(context.Background(), "agent-a", "api-token")
-			if err != nil || value != "scoped-access" {
-				t.Error("token acquisition failed", err)
-			}
-		}()
-	}
-	wg.Wait()
-	if calls.Load() != 1 {
-		t.Fatal("token endpoint stampede", calls.Load())
-	}
-	b, err := NewMounted("agent-b", "mastra", p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b.HTTP = server.Client()
-	if _, err := b.Read(context.Background(), "agent-b", "api-token"); err != nil {
-		t.Fatal(err)
-	}
-	if calls.Load() != 2 {
-		t.Fatal("token cache was shared between agents")
-	}
-	time.Sleep(time.Second)
-	if _, err := a.Read(context.Background(), "agent-a", "api-token"); err != nil {
-		t.Fatal(err)
-	}
-	if calls.Load() != 3 {
-		t.Fatal("token expiry did not refresh")
-	}
-	secret(t, p, map[string]Entry{"api-token": {Type: "oauth2", TokenEndpoint: server.URL, ClientID: "client", ClientSecret: "wrong"}})
-	if _, err := a.Read(context.Background(), "agent-a", "api-token"); err == nil {
-		t.Fatal("rotated wrong secret reused token")
+	entry.ClientSecret = "wrong"
+	if _, e = m.acquire(context.Background(), entry); e == nil {
+		t.Fatal("bad client credentials accepted")
 	}
 }
+
 func TestOAuthRotationDuringAcquisitionCannotPublishOldToken(t *testing.T) {
+	url := os.Getenv("AUTH_DEMO_TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("requires isolated PostgreSQL integration database")
+	}
+	pool, e := pgxpool.New(context.Background(), url)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer pool.Close()
 	started := make(chan struct{})
 	release := make(chan struct{})
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +155,10 @@ func TestOAuthRotationDuringAcquisitionCannotPublishOldToken(t *testing.T) {
 	secret(t, p, map[string]Entry{"api-token": {Type: "oauth2", TokenEndpoint: server.URL, ClientID: "client", ClientSecret: "secret"}})
 	a, _ := NewMounted("agent-a", "mastra", p)
 	a.HTTP = server.Client()
+	a.Shared, e = authstate.New(context.Background(), pool, bytes.Repeat([]byte{7}, 32))
+	if e != nil {
+		t.Fatal(e)
+	}
 	done := make(chan error, 1)
 	go func() { _, err := a.Read(context.Background(), "agent-a", "api-token"); done <- err }()
 	<-started

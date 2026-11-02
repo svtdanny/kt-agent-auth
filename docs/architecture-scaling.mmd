@@ -1,0 +1,56 @@
+%% ARCH-02 / 1 — proposed scaling; existing egress Pod composition retained.
+%% W_p = worker replicas; G_p = egress replicas; D_p = Agent definitions.
+flowchart LR
+    subgraph K8S["Kubernetes cluster"]
+        subgraph PLATFORM["Platform namespaces — shared"]
+            KAGENT["Deployment: kagent controller"]
+            SUBSTRATE["Deployments: Substrate APIs"]
+            METRICS["Metrics collection + adapter"]
+            NODES["Node autoscaler → node pool capacity"]
+            KAGENT -->|gRPC| SUBSTRATE
+        end
+        subgraph PROJECT["namespace: project — repeat for each project"]
+            DEF["Agent + Harness CRs × D_p<br/>Image, configuration, workerPoolRef"]
+            HW["HPA: workers<br/>Active demand / resources / backlog"]
+            HG["HPA: agent-egress<br/>Envoy + authorizer container metrics"]
+            SECRET["Mounted project credentials + encryption key"]
+            subgraph WP["WorkerPool — replicas W_p"]
+                subgraph WPOD["Pod × W_p"]
+                    ACTORS["Actor sandboxes<br/>Distinct Agent Session identities"]
+                    TUNNEL["atunnel"]
+                    ACTORS --> TUNNEL
+                end
+            end
+            SVC["Service: agent-egress"]
+            subgraph GD["Deployment: agent-egress — replicas G_p"]
+                subgraph GPOD["Pod × G_p"]
+                    ENVOY["Container: Envoy"]
+                    AUTH["Container: authorizer<br/>ext_proc + Session bridge<br/>Local token cache"]
+                    NATIVE["Container: native-egress"]
+                    SDS["Native sidecar: sdsmint"]
+                    ENVOY -->|"local gRPC / mTLS"| AUTH
+                end
+            end
+            DEF -.->|references| WP
+            HW -.->|"/scale → W_p"| WP
+            HG -.->|"/scale → G_p"| GD
+            SECRET -.->|mount| AUTH
+            TUNNEL -->|"mTLS CONNECT"| SVC --> ENVOY
+        end
+        METRICS -.-> HW
+        METRICS -.-> HG
+        SUBSTRATE -.->|"Actor lifecycle / scheduling"| PROJECT
+    end
+    subgraph SHARED["Shared dependencies — in-cluster or managed"]
+        PG[("PostgreSQL<br/>kagent / Substrate databases<br/>Project bindings DB + role<br/>Optional auth-state backend A")]
+        REDIS[("Optional Redis<br/>Auth-state backend B<br/>Project ACL + key prefix")]
+        APIS["MCP / application APIs"]
+        LOGIN["External authentication endpoint"]
+    end
+    AUTH -->|"SQL / TLS: bindings; optional auth state"| PG
+    AUTH -->|"TLS: optional auth state"| REDIS
+    AUTH -->|"HTTPS: coordinated acquisition"| LOGIN
+    ENVOY -->|"Allowed application traffic"| APIS
+    classDef default fill:#fff,stroke:#536778,color:#17212b;
+    classDef hpa fill:#fffcf6,stroke:#9a5714,color:#9a5714;
+    class HW,HG hpa;
