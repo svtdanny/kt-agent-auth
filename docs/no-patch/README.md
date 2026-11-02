@@ -1,5 +1,7 @@
 # No-patch architecture
 
+The newer [generic Envoy configuration overlay](../../k8s/shared-egress/README.md) replaces the fixed namespace map with `authorizer-extproc.<verified-namespace>.svc:50052`. It composes with the pinned upstream manifest and requires no per-project gateway update. Its isolated real-Envoy test adds a third authorizer after startup while an existing response stream stays active. It needs a common gateway mTLS identity/trust setup; it has not replaced the running cluster deployment. The diagrams and rendered YAML below document the earlier hardcoded two-project experiment.
+
 | View | SVG | PDF | PNG |
 | --- | --- | --- | --- |
 | Shared gateway, project namespaces and independent scaling | [Open](architecture-scaling.svg) | [Print](architecture-scaling.pdf) | [Preview](architecture-scaling.png) |
